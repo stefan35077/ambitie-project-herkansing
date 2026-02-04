@@ -15,6 +15,11 @@ public class ChainController : MonoBehaviour
     public float startHeadDist = 3f;
     public float catchUpSpeed = 3f;
 
+    [Header("Chain Reactions")]
+    public float gapEps = 0.02f;          // tolerance for "touching"
+    private bool chainReactionArmed = false;
+    private readonly List<bool> gapPrev = new(); // tracks which gaps existed last frame
+
     [Tooltip("If 0, spacing is auto-calculated from prefab diameter.")]
     public float spacing = 0f;
 
@@ -105,6 +110,9 @@ public class ChainController : MonoBehaviour
         }
 
         ApplyVisuals();
+
+        RebuildGapPrev();
+        chainReactionArmed = false;
     }
 
     bool TryGetMatchAtIndex(int index, out MatchRange range)
@@ -128,6 +136,72 @@ public class ChainController : MonoBehaviour
 
         return range.Count >= matchCount;
     }
+
+    void RebuildGapPrev()
+    {
+        gapPrev.Clear();
+        if (balls == null) return;
+
+        for (int i = 0; i < balls.Count - 1; i++)
+        {
+            float gap = balls[i].dist - (balls[i + 1].dist + spacing);
+            gapPrev.Add(gap > gapEps);
+        }
+    }
+
+    bool AnyGapNow()
+    {
+        for (int i = 0; i < balls.Count - 1; i++)
+        {
+            float gap = balls[i].dist - (balls[i + 1].dist + spacing);
+            if (gap > gapEps) return true;
+        }
+        return false;
+    }
+
+    bool TryChainReaction()
+    {
+        if (balls == null || balls.Count < matchCount) return false;
+
+        // Ensure gapPrev length matches current chain
+        if (gapPrev.Count != balls.Count - 1)
+            RebuildGapPrev();
+
+        for (int i = 0; i < balls.Count - 1; i++)
+        {
+            float gap = balls[i].dist - (balls[i + 1].dist + spacing);
+            bool isGappedNow = gap > gapEps;
+
+            bool wasGapped = gapPrev[i];
+            bool justClosed = wasGapped && !isGappedNow;
+
+            // update tracking for next frame
+            gapPrev[i] = isGappedNow;
+
+            if (!justClosed) continue;
+
+            // Gap just closed between i and i+1. Check boundary match
+            if (balls[i].colorId != balls[i + 1].colorId) continue;
+
+            if (TryGetMatchAtIndex(i, out var match))
+            {
+                // optional debug outline
+                debugHasMatch = true;
+                debugMatchStart = match.start;
+                debugMatchEnd = match.end;
+
+                RemoveRange(match.start, match.end);
+                ApplyVisuals();
+
+                // After removal, gaps list changed
+                RebuildGapPrev();
+                return true;
+            }
+        }
+
+        return false;
+    }
+
 
     GameObject PickBallPrefab(out int colorId)
     {
@@ -179,12 +253,20 @@ public class ChainController : MonoBehaviour
         // MATCH CHECK + REMOVE
         if (TryGetMatchAtIndex(insertIndex, out var match))
         {
-            Debug.Log($"MATCH REMOVE {match.start}-{match.end} count={match.Count}");
+            debugHasMatch = true;
+            debugMatchStart = match.start;
+            debugMatchEnd = match.end;
 
             RemoveRange(match.start, match.end);
-
-            // Just update visuals. Do NOT force-close the gap; tail push will do it naturally.
             ApplyVisuals();
+
+            // ARM chain reactions (gap will close over time)
+            chainReactionArmed = true;
+            RebuildGapPrev();
+        }
+        else
+        {
+            debugHasMatch = false;
         }
 
         // Keep headDist aligned with the actual head after insertion
@@ -280,6 +362,16 @@ public class ChainController : MonoBehaviour
                 enabled = false;
                 return;
             }
+        }
+
+        if (chainReactionArmed)
+        {
+            // Try one reaction per frame (clean + stable)
+            bool removed = TryChainReaction();
+
+            // If no gaps exist anymore and nothing removed, disarm
+            if (!removed && !AnyGapNow())
+                chainReactionArmed = false;
         }
 
         ApplyVisuals();
