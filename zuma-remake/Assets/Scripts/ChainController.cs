@@ -12,8 +12,10 @@ public class ChainController : MonoBehaviour
     public float speed = 3f;
     public float spacing = 0.6f;
     public float startHeadDist = 3f; // IMPORTANT: prevents everything being < 0 at start
+    public float catchUpSpeed = 3f;
 
     private float headDist;
+
 
     private class Ball
     {
@@ -44,11 +46,14 @@ public class ChainController : MonoBehaviour
         for (int i = 0; i < ballCount; i++)
         {
             GameObject go = Instantiate(ballPrefab, transform);
+
+            var r = ballPrefab.GetComponentInChildren<Renderer>();
+            float diameter = r.bounds.size.x;   
+            spacing = diameter * 0.98f;               
+
             var b = new Ball
             {
                 tr = go.transform,
-                b.dist += speed * dt;
-
                 dist = headDist - i * spacing,
                 rend = go.GetComponentInChildren<Renderer>()
             };
@@ -62,12 +67,28 @@ public class ChainController : MonoBehaviour
 
     void Update()
     {
-        headDist += speed * Time.deltaTime;
+        float dt = Time.deltaTime;
 
+        // 1) Drive the head
+        headDist += speed * dt;
+        balls[0].dist = headDist;
+
+        // 2) Let the rest try to move forward (catch up)
+        for (int i = 1; i < balls.Count; i++)
+            balls[i].dist += catchUpSpeed * dt;
+
+        // 3) Enforce spacing (no overlaps)
+        for (int i = 1; i < balls.Count; i++)
+        {
+            float maxDist = balls[i - 1].dist - spacing;
+            if (balls[i].dist > maxDist)
+                balls[i].dist = maxDist;
+        }
+
+        // 4) Apply visuals
         for (int i = 0; i < balls.Count; i++)
         {
             var b = balls[i];
-            b.dist = headDist - i * spacing;
 
             if (b.rend != null)
                 b.rend.enabled = (b.dist >= 0f);
@@ -76,4 +97,5 @@ public class ChainController : MonoBehaviour
                 b.tr.position = path.GetPos(b.dist);
         }
     }
+
 }
