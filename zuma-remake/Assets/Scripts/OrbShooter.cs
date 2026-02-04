@@ -4,6 +4,11 @@ using UnityEngine.InputSystem;
 
 public class OrbShooter : MonoBehaviour
 {
+    public PathSystem path;
+
+    private float mouseDistOnPath;
+    private Vector3 mouseClosestPoint;
+
     private Vector3 mouseWorldPos;
     private bool hasMousePos;
 
@@ -33,6 +38,11 @@ public class OrbShooter : MonoBehaviour
         }
 
         this.gameObject.transform.rotation = Quaternion.LookRotation(Vector3.forward, mouseWorldPos - this.gameObject.transform.position);
+
+        if (hasMousePos && path != null)
+        {
+            mouseDistOnPath = path.GetClosestDistanceOnPath(mouseWorldPos, out mouseClosestPoint);
+        }
     }
 
     void OnDrawGizmos()
@@ -42,5 +52,12 @@ public class OrbShooter : MonoBehaviour
         Gizmos.color = Color.red;
         Gizmos.DrawSphere(mouseWorldPos, 0.25f);
         Gizmos.DrawLine(mouseWorldPos, mouseWorldPos + Vector3.up * 2f);
+
+        if (path != null)
+        {
+            Gizmos.color = Color.green;
+            Gizmos.DrawSphere(mouseClosestPoint, 0.25f);
+            Gizmos.DrawLine(mouseWorldPos, mouseClosestPoint);
+        }
     }
 }

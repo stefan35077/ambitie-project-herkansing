@@ -129,6 +129,46 @@ public class PathSystem : MonoBehaviour
         );
     }
 
+
+    public float GetClosestDistanceOnPath(Vector3 worldPos, out Vector3 closestPoint)
+    {
+        closestPoint = transform.position;
+
+        if (bakedPoints == null || bakedPoints.Count < 2)
+            return 0f;
+
+        float bestSqr = float.PositiveInfinity;
+        float bestDist = 0f;
+
+        for (int i = 0; i < bakedPoints.Count - 1; i++)
+        {
+            Vector3 a = bakedPoints[i];
+            Vector3 b = bakedPoints[i + 1];
+            Vector3 ab = b - a;
+
+            float abLenSqr = ab.sqrMagnitude;
+            if (abLenSqr < 0.000001f) continue;
+
+            float t = Vector3.Dot(worldPos - a, ab) / abLenSqr;
+            t = Mathf.Clamp01(t);
+
+            Vector3 q = a + ab * t; // closest point on this segment
+            float sqr = (worldPos - q).sqrMagnitude;
+
+            if (sqr < bestSqr)
+            {
+                bestSqr = sqr;
+                closestPoint = q;
+
+                float segLen = Mathf.Sqrt(abLenSqr);
+                bestDist = cumLen[i] + t * segLen; // distance along entire path
+            }
+        }
+
+        return bestDist;
+    }
+
+
     void OnDrawGizmos()
     {
         if (!drawGizmos) return;
