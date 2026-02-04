@@ -110,12 +110,10 @@ public class ChainController : MonoBehaviour
     bool TryGetMatchAtIndex(int index, out MatchRange range)
     {
         range = default;
-
         if (balls == null || balls.Count == 0) return false;
         if (index < 0 || index >= balls.Count) return false;
 
         int color = balls[index].colorId;
-        if (color < 0) return false;
 
         int left = index;
         while (left - 1 >= 0 && balls[left - 1].colorId == color)
@@ -178,18 +176,15 @@ public class ChainController : MonoBehaviour
         headDist = balls[0].dist;
         ApplyVisuals();
 
-        // MATCH CHECK
+        // MATCH CHECK + REMOVE
         if (TryGetMatchAtIndex(insertIndex, out var match))
         {
-            Debug.Log($"MATCH! color={balls[insertIndex].colorId} range={match.start}-{match.end} count={match.Count}");
-            debugHasMatch = true;
-            debugMatchStart = match.start;
-            debugMatchEnd = match.end;
-        }
-        else
-        {
-            Debug.Log("No match.");
-            debugHasMatch = false;
+            Debug.Log($"MATCH REMOVE {match.start}-{match.end} count={match.Count}");
+
+            RemoveRange(match.start, match.end);
+
+            // Just update visuals. Do NOT force-close the gap; tail push will do it naturally.
+            ApplyVisuals();
         }
 
         // Keep headDist aligned with the actual head after insertion
@@ -231,26 +226,54 @@ public class ChainController : MonoBehaviour
         }
     }
 
+    void RemoveRange(int start, int end)
+    {
+        // safety
+        start = Mathf.Clamp(start, 0, balls.Count - 1);
+        end = Mathf.Clamp(end, 0, balls.Count - 1);
+        if (start > end) return;
+
+        // Remove from END to START so indices don’t shift under you
+        for (int i = end; i >= start; i--)
+        {
+            if (balls[i].tr != null)
+                Destroy(balls[i].tr.gameObject);
+
+            balls.RemoveAt(i);
+        }
+    }
+
     void Update()
     {
         if (balls == null || balls.Count == 0) return;
 
         float dt = Time.deltaTime;
 
-        // Sync then advance head
-        headDist = balls[0].dist;
-        headDist += speed * dt;
-        balls[0].dist = headDist;
+        // Tail-driven push (Zuma-style)
+        int tail = balls.Count - 1;
 
-        // End of path
-        if (headDist >= path.TotalLength - endPadding)
+        // move the last ball forward (this "pushes" the chain)
+        balls[tail].dist += speed * dt;
+
+        // push forward only when overlapping (no gap pushing)
+        for (int i = tail - 1; i >= 0; i--)
+        {
+            float minDist = balls[i + 1].dist + spacing; // must be at least spacing ahead of the ball behind it
+            if (balls[i].dist < minDist)
+                balls[i].dist = minDist;
+        }
+
+        // End-of-path check is based on the head reaching the end
+        if (balls[0].dist >= path.TotalLength - endPadding)
         {
             Debug.Log("Reached end of path!");
 
             if (loopForTesting)
             {
-                headDist = 0f;
-                balls[0].dist = headDist;
+                // reset the whole chain by shifting all dists back by head amount
+                float shift = balls[0].dist;
+                for (int i = 0; i < balls.Count; i++)
+                    balls[i].dist -= shift;
             }
             else
             {
@@ -259,20 +282,9 @@ public class ChainController : MonoBehaviour
             }
         }
 
-        // Catch-up drift
-        for (int i = 1; i < balls.Count; i++)
-            balls[i].dist += catchUpSpeed * dt;
-
-        // Spacing constraint (head -> tail)
-        for (int i = 1; i < balls.Count; i++)
-        {
-            float maxDist = balls[i - 1].dist - spacing;
-            if (balls[i].dist > maxDist)
-                balls[i].dist = maxDist;
-        }
-
         ApplyVisuals();
     }
+
 
     void OnDrawGizmos()
     {
