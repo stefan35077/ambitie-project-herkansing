@@ -16,6 +16,9 @@ public class ChainController : MonoBehaviour
 
     private float headDist;
 
+    [Header("End of Path")]
+    public float endPadding = 0.3f;
+    public bool loopForTesting = false;
 
     private class Ball
     {
@@ -72,6 +75,21 @@ public class ChainController : MonoBehaviour
         // 1) Drive the head
         headDist += speed * dt;
         balls[0].dist = headDist;
+
+        if (headDist >= path.TotalLength - endPadding)
+        {
+            Debug.Log("Reached end of path!");
+
+            if (loopForTesting)
+            {
+                headDist = 0f; // quick test reset
+                balls[0].dist = headDist;
+            }
+            else
+            {
+                enabled = false; // stops the chain (replace with your lose logic)
+            }
+        }
 
         // 2) Let the rest try to move forward (catch up)
         for (int i = 1; i < balls.Count; i++)
