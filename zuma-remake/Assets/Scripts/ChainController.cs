@@ -24,6 +24,20 @@ public class ChainController : MonoBehaviour
 
     float headDist;
 
+    [Header("Match Rules")]
+    public int matchCount = 3;
+
+
+    private bool debugHasMatch;
+    private int debugMatchStart, debugMatchEnd;
+
+    struct MatchRange
+    {
+        public int start;
+        public int end;
+        public int Count => end - start + 1;
+    }
+
     public class Ball
     {
         public Transform tr;
@@ -93,6 +107,30 @@ public class ChainController : MonoBehaviour
         ApplyVisuals();
     }
 
+    bool TryGetMatchAtIndex(int index, out MatchRange range)
+    {
+        range = default;
+
+        if (balls == null || balls.Count == 0) return false;
+        if (index < 0 || index >= balls.Count) return false;
+
+        int color = balls[index].colorId;
+        if (color < 0) return false;
+
+        int left = index;
+        while (left - 1 >= 0 && balls[left - 1].colorId == color)
+            left--;
+
+        int right = index;
+        while (right + 1 < balls.Count && balls[right + 1].colorId == color)
+            right++;
+
+        range.start = left;
+        range.end = right;
+
+        return range.Count >= matchCount;
+    }
+
     GameObject PickBallPrefab(out int colorId)
     {
         colorId = Random.Range(0, ballPrefabs.Count);
@@ -139,6 +177,23 @@ public class ChainController : MonoBehaviour
         balls.Insert(insertIndex, newBall);
 
         ResolveSpacingLocal(insertIndex);
+
+        headDist = balls[0].dist;
+        ApplyVisuals();
+
+        // MATCH CHECK
+        if (TryGetMatchAtIndex(insertIndex, out var match))
+        {
+            Debug.Log($"MATCH! color={balls[insertIndex].colorId} range={match.start}-{match.end} count={match.Count}");
+            debugHasMatch = true;
+            debugMatchStart = match.start;
+            debugMatchEnd = match.end;
+        }
+        else
+        {
+            Debug.Log("No match.");
+            debugHasMatch = false;
+        }
 
         // Keep headDist aligned with the actual head after insertion
         headDist = balls[0].dist;
@@ -220,5 +275,20 @@ public class ChainController : MonoBehaviour
         }
 
         ApplyVisuals();
+    }
+
+    void OnDrawGizmos()
+    {
+        if (!Application.isPlaying) return;
+        if (!debugHasMatch) return;
+        if (balls == null) return;
+
+        Gizmos.color = Color.magenta;
+        for (int i = debugMatchStart; i <= debugMatchEnd; i++)
+        {
+            if (i < 0 || i >= balls.Count) continue;
+            if (balls[i].tr == null) continue;
+            Gizmos.DrawWireSphere(balls[i].tr.position, 0.35f);
+        }
     }
 }
