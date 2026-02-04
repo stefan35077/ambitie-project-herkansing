@@ -21,23 +21,32 @@ public class OrbShooter : MonoBehaviour
     {
         GetMousePos();
         LoopThroughBalls();
+
+        if (Mouse.current.leftButton.wasPressedThisFrame)
+        {
+            chain.InsertBall(debugInsertDist);
+            Debug.Log("Inserted ball at planned dist: " + debugInsertDist);
+        }
     }
 
     public void LoopThroughBalls()
     {
+        if (chain == null || chain.balls == null || chain.balls.Count == 0) return;
+
         int nearestIndex = 0;
         float best = float.PositiveInfinity;
 
         for (int i = 0; i < chain.balls.Count; i++)
         {
             float d = Mathf.Abs(chain.balls[i].dist - mouseDistOnPath);
-
             if (d < best)
             {
                 best = d;
                 nearestIndex = i;
             }
         }
+
+        debugInsertDist = mouseDistOnPath;
 
         if (mouseDistOnPath > chain.balls[nearestIndex].dist)
             debugInsertDist = chain.balls[nearestIndex].dist + chain.spacing;

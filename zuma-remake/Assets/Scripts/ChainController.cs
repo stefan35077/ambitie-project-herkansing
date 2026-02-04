@@ -68,6 +68,110 @@ public class ChainController : MonoBehaviour
         }
     }
 
+    public void InsertBall(float insertDist)
+    {
+        Debug.Log($"InsertBall called. insertDist={insertDist}");
+
+        if (!path)
+        {
+            Debug.LogError("InsertBall: path is null");
+            return;
+        }
+        if (!ballPrefab)
+        {
+            Debug.LogError("InsertBall: ballPrefab is null");
+            return;
+        }
+
+        // 1) Find nearest ball index
+        int nearestIndex = 0;
+        float best = float.PositiveInfinity;
+
+        for (int i = 0; i < balls.Count; i++)
+        {
+            float d = Mathf.Abs(balls[i].dist - insertDist);
+            if (d < best)
+            {
+                best = d;
+                nearestIndex = i;
+            }
+        }
+
+        // 2) Decide insert side
+        int insertIndex = balls.Count; // default = end (tail)
+        for (int i = 0; i < balls.Count; i++)
+        {
+            if (insertDist > balls[i].dist) // bigger dist = more toward head
+            {
+                insertIndex = i;
+                break;
+            }
+        }
+
+        // 3) Instantiate
+        GameObject go = Instantiate(ballPrefab, transform);
+        go.name = $"InsertedBall_{insertIndex}";
+        Debug.Log($"Instantiated: {go.name} at {go.transform.position}");
+
+        Renderer r = go.GetComponentInChildren<Renderer>();
+        if (!r) Debug.LogWarning("Inserted ball has no Renderer in prefab (it may be invisible).");
+
+        var newBall = new Ball
+        {
+            tr = go.transform,
+            dist = Mathf.Clamp(insertDist, 0f, path.TotalLength), // safety
+            rend = r
+        };
+
+        // Force visible + force position RIGHT NOW (so you see it immediately)
+        if (newBall.rend != null)
+            newBall.rend.enabled = true;
+
+        newBall.tr.position = path.GetPos(newBall.dist);
+
+        // Debug color (temporary)
+        if (newBall.rend != null)
+            newBall.rend.material.color = Color.red;
+
+        // 4) Insert & resolve
+        balls.Insert(insertIndex, newBall);
+        ResolveSpacing();
+
+        // Apply positions once after resolving (so it snaps correctly)
+        ApplyVisuals();
+    }
+
+    void ResolveSpacing()
+    {
+        for (int i = 1; i < balls.Count; i++)
+        {
+            float maxDist = balls[i - 1].dist - spacing;
+            if (balls[i].dist > maxDist)
+                balls[i].dist = maxDist;
+        }
+
+        for (int i = balls.Count - 2; i >= 0; i--)
+        {
+            float minDist = balls[i + 1].dist + spacing;
+            if (balls[i].dist < minDist)
+                balls[i].dist = minDist;
+        }
+    }
+
+    void ApplyVisuals()
+    {
+        for (int i = 0; i < balls.Count; i++)
+        {
+            var b = balls[i];
+
+            if (b.rend != null)
+                b.rend.enabled = (b.dist >= 0f);
+
+            if (b.dist >= 0f)
+                b.tr.position = path.GetPos(b.dist);
+        }
+    }
+
     void Update()
     {
         float dt = Time.deltaTime;
