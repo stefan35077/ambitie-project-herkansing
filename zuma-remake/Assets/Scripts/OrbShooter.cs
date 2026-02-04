@@ -1,77 +1,116 @@
 using UnityEngine;
-using static UnityEngine.Rendering.HableCurve;
 using UnityEngine.InputSystem;
 
 public class OrbShooter : MonoBehaviour
 {
-    public PathSystem path;
     public ChainController chain;
 
-    private float mouseDistOnPath;
-    private Vector3 mouseClosestPoint;
+    [Header("Hit Settings (Zuma-style)")]
+    public float hitRadius = 0.8f; // tune: roughly ball diameter * 0.9
 
+    // Mouse
     private Vector3 mouseWorldPos;
     private bool hasMousePos;
 
-    private int debugNearestIndex = -1;
+    // Path projection (still useful for debugging)
+    private float mouseDistOnPath;
+    private Vector3 mouseClosestPoint;
+
+    // Debug gizmos
+    private int debugHitIndex = -1;
     private float debugInsertDist;
     private Vector3 debugInsertWorldPos;
 
     void Update()
     {
-        GetMousePos();
-        LoopThroughBalls();
+        if (!chain || !chain.path) return;
 
-        if (Mouse.current.leftButton.wasPressedThisFrame)
+        GetMousePos();
+        if (!hasMousePos) return;
+
+        // Keep this for debug (not for choosing hit ball)
+        mouseDistOnPath = chain.path.GetClosestDistanceOnPath(mouseWorldPos, out mouseClosestPoint);
+
+        // Choose which ball you're "hitting" in world space (Zuma rule)
+        debugHitIndex = FindHitBallIndex(mouseWorldPos, hitRadius);
+
+        // Compute planned insert spot for gizmos
+        ComputeDebugInsertFromHit();
+
+        if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
         {
-            chain.InsertBall(debugInsertDist);
-            Debug.Log("Inserted ball at planned dist: " + debugInsertDist);
+            if (debugHitIndex == -1)
+            {
+                Debug.Log("No hit: click closer to the chain.");
+                return;
+            }
+
+            chain.InsertBallAtHitIndex(debugHitIndex, mouseWorldPos);
         }
     }
 
-    public void LoopThroughBalls()
+    int FindHitBallIndex(Vector3 worldPos, float radius)
     {
-        if (chain == null || chain.balls == null || chain.balls.Count == 0) return;
+        if (chain.balls == null || chain.balls.Count == 0) return -1;
 
-        int nearestIndex = 0;
-        float best = float.PositiveInfinity;
+        int bestIndex = -1;
+        float bestSqr = radius * radius;
 
         for (int i = 0; i < chain.balls.Count; i++)
         {
-            float d = Mathf.Abs(chain.balls[i].dist - mouseDistOnPath);
-            if (d < best)
+            var b = chain.balls[i];
+
+            // Ignore hidden balls (dist < 0)
+            if (b.rend != null && !b.rend.enabled) continue;
+
+            float sqr = (worldPos - b.tr.position).sqrMagnitude;
+            if (sqr < bestSqr)
             {
-                best = d;
-                nearestIndex = i;
+                bestSqr = sqr;
+                bestIndex = i;
             }
         }
 
-        debugInsertDist = mouseDistOnPath;
+        return bestIndex;
+    }
 
-        if (mouseDistOnPath > chain.balls[nearestIndex].dist)
-            debugInsertDist = chain.balls[nearestIndex].dist + chain.spacing;
-        else
-            debugInsertDist = chain.balls[nearestIndex].dist - chain.spacing;
+    void ComputeDebugInsertFromHit()
+    {
+        debugInsertDist = 0f;
+        debugInsertWorldPos = Vector3.zero;
 
-        debugNearestIndex = nearestIndex;
+        if (debugHitIndex < 0) return;
+        if (debugHitIndex >= chain.balls.Count) return;
+
+        float baseDist = chain.balls[debugHitIndex].dist;
+
+        float distBefore = Mathf.Clamp(baseDist + chain.spacing, 0f, chain.path.TotalLength);
+        float distAfter = Mathf.Clamp(baseDist - chain.spacing, 0f, chain.path.TotalLength);
+
+        Vector3 posBefore = chain.path.GetPos(distBefore);
+        Vector3 posAfter = chain.path.GetPos(distAfter);
+
+        // Pick the closer of the two valid slots around the hit ball
+        bool insertBefore = (mouseWorldPos - posBefore).sqrMagnitude <= (mouseWorldPos - posAfter).sqrMagnitude;
+
+        debugInsertDist = insertBefore ? distBefore : distAfter;
         debugInsertWorldPos = chain.path.GetPos(debugInsertDist);
     }
 
-
-    public void GetMousePos()
+    void GetMousePos()
     {
         var cam = Camera.main;
-        if (!cam) return;
+        if (!cam) { hasMousePos = false; return; }
 
-        // New Input System: pointer/mouse screen position
-        Vector2 screenPos = Mouse.current != null
+        Vector2 screenPos = (Mouse.current != null)
             ? Mouse.current.position.ReadValue()
             : Pointer.current.position.ReadValue();
 
         Ray ray = cam.ScreenPointToRay(screenPos);
 
-        // Plane at Y = 0 (change to match your path height if needed)
-        Plane plane = new Plane(Vector3.forward, Vector3.zero);
+        // Match your game plane (you used z-plane)
+        float zPlane = chain ? chain.transform.position.z : 0f;
+        Plane plane = new Plane(Vector3.forward, new Vector3(0f, 0f, zPlane));
 
         if (plane.Raycast(ray, out float enter))
         {
@@ -82,47 +121,37 @@ public class OrbShooter : MonoBehaviour
         {
             hasMousePos = false;
         }
-
-        this.gameObject.transform.rotation = Quaternion.LookRotation(Vector3.forward, mouseWorldPos - this.gameObject.transform.position);
-
-        if (hasMousePos && path != null)
-        {
-            mouseDistOnPath = path.GetClosestDistanceOnPath(mouseWorldPos, out mouseClosestPoint);
-        }
     }
 
     void OnDrawGizmos()
     {
         if (!hasMousePos) return;
 
+        // Mouse position
         Gizmos.color = Color.red;
-        Gizmos.DrawSphere(mouseWorldPos, 0.25f);
-        Gizmos.DrawLine(mouseWorldPos, mouseWorldPos + Vector3.up * 2f);
+        Gizmos.DrawSphere(mouseWorldPos, 0.20f);
 
-        if (path != null)
-        {
-            Gizmos.color = Color.green;
-            Gizmos.DrawSphere(mouseClosestPoint, 0.25f);
-            Gizmos.DrawLine(mouseWorldPos, mouseClosestPoint);
-        }
-
-        if (debugNearestIndex < 0) return;
-
-        // Nearest ball
-        Gizmos.color = Color.yellow;
-        Gizmos.DrawSphere(
-            chain.balls[debugNearestIndex].tr.position,
-            0.25f
-        );
-
-        // Insert position
+        // Closest point on path (debug only)
         Gizmos.color = Color.green;
-        Gizmos.DrawSphere(debugInsertWorldPos, 0.3f);
+        Gizmos.DrawSphere(mouseClosestPoint, 0.22f);
+        Gizmos.DrawLine(mouseWorldPos, mouseClosestPoint);
 
-        // Connection line
-        Gizmos.DrawLine(
-            chain.balls[debugNearestIndex].tr.position,
-            debugInsertWorldPos
-        );
+        if (!chain || chain.balls == null || chain.balls.Count == 0) return;
+
+        // Hit radius visualization
+        Gizmos.color = new Color(1f, 1f, 1f, 0.25f);
+        Gizmos.DrawWireSphere(mouseWorldPos, hitRadius);
+
+        // Hit ball
+        if (debugHitIndex >= 0 && debugHitIndex < chain.balls.Count)
+        {
+            Gizmos.color = Color.yellow;
+            Gizmos.DrawSphere(chain.balls[debugHitIndex].tr.position, 0.24f);
+
+            // Planned insert spot (slot before/after)
+            Gizmos.color = Color.cyan;
+            Gizmos.DrawSphere(debugInsertWorldPos, 0.26f);
+            Gizmos.DrawLine(chain.balls[debugHitIndex].tr.position, debugInsertWorldPos);
+        }
     }
 }

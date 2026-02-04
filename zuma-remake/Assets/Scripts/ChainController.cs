@@ -5,28 +5,34 @@ public class ChainController : MonoBehaviour
 {
     [Header("Refs")]
     public PathSystem path;
-    public GameObject ballPrefab;
+
+    [Header("Ball Prefabs (one per color)")]
+    public List<GameObject> ballPrefabs = new();
 
     [Header("Chain")]
     public int ballCount = 20;
     public float speed = 3f;
-    public float spacing = 0.6f;
     public float startHeadDist = 3f;
     public float catchUpSpeed = 3f;
 
-    private float headDist;
+    [Tooltip("If 0, spacing is auto-calculated from prefab diameter.")]
+    public float spacing = 0f;
 
     [Header("End of Path")]
     public float endPadding = 0.3f;
     public bool loopForTesting = false;
+
+    float headDist;
 
     public class Ball
     {
         public Transform tr;
         public float dist;
         public Renderer rend;
+        public int colorId; // index in ballPrefabs
     }
 
+    [Header("Runtime Chain (read-only)")]
     public List<Ball> balls = new();
 
     void Start()
@@ -37,120 +43,121 @@ public class ChainController : MonoBehaviour
             enabled = false;
             return;
         }
-        if (!ballPrefab)
+
+        if (ballPrefabs == null || ballPrefabs.Count == 0)
         {
-            Debug.LogError("ChainController: 'ballPrefab' is not assigned.");
+            Debug.LogError("ChainController: ballPrefabs list is empty.");
             enabled = false;
             return;
         }
 
+        // Auto spacing once from the first prefab (all prefabs should be same size)
+        if (spacing <= 0f)
+        {
+            var r0 = ballPrefabs[0].GetComponentInChildren<Renderer>();
+            if (r0 != null)
+            {
+                float diameter = Mathf.Max(r0.bounds.size.x, r0.bounds.size.z);
+                spacing = diameter * 0.98f;
+            }
+            else
+            {
+                spacing = 0.6f;
+                Debug.LogWarning("ChainController: Could not auto-calc spacing. Using 0.6.");
+            }
+        }
+
         headDist = startHeadDist;
 
+        // Spawn initial chain
+        balls.Clear();
         for (int i = 0; i < ballCount; i++)
         {
-            GameObject go = Instantiate(ballPrefab, transform);
+            int colorId;
+            GameObject prefab = PickBallPrefab(out colorId);
 
-            var r = ballPrefab.GetComponentInChildren<Renderer>();
-            float diameter = r.bounds.size.x;   
-            spacing = diameter * 0.98f;               
+            GameObject go = Instantiate(prefab, transform);
+            Renderer r = go.GetComponentInChildren<Renderer>();
 
-            var b = new Ball
+            Ball b = new Ball
             {
                 tr = go.transform,
                 dist = headDist - i * spacing,
-                rend = go.GetComponentInChildren<Renderer>()
+                rend = r,
+                colorId = colorId
             };
-
-            if (b.rend == null)
-                Debug.LogWarning($"Ball prefab has no Renderer (ball index {i}). It may be invisible.");
 
             balls.Add(b);
         }
-    }
 
-    public void InsertBall(float insertDist)
-    {
-        Debug.Log($"InsertBall called. insertDist={insertDist}");
-
-        if (!path)
-        {
-            Debug.LogError("InsertBall: path is null");
-            return;
-        }
-        if (!ballPrefab)
-        {
-            Debug.LogError("InsertBall: ballPrefab is null");
-            return;
-        }
-
-        // 1) Find nearest ball index
-        int nearestIndex = 0;
-        float best = float.PositiveInfinity;
-
-        for (int i = 0; i < balls.Count; i++)
-        {
-            float d = Mathf.Abs(balls[i].dist - insertDist);
-            if (d < best)
-            {
-                best = d;
-                nearestIndex = i;
-            }
-        }
-
-        // 2) Decide insert side
-        int insertIndex = balls.Count; // default = end (tail)
-        for (int i = 0; i < balls.Count; i++)
-        {
-            if (insertDist > balls[i].dist) // bigger dist = more toward head
-            {
-                insertIndex = i;
-                break;
-            }
-        }
-
-        // 3) Instantiate
-        GameObject go = Instantiate(ballPrefab, transform);
-        go.name = $"InsertedBall_{insertIndex}";
-        Debug.Log($"Instantiated: {go.name} at {go.transform.position}");
-
-        Renderer r = go.GetComponentInChildren<Renderer>();
-        if (!r) Debug.LogWarning("Inserted ball has no Renderer in prefab (it may be invisible).");
-
-        var newBall = new Ball
-        {
-            tr = go.transform,
-            dist = Mathf.Clamp(insertDist, 0f, path.TotalLength), // safety
-            rend = r
-        };
-
-        // Force visible + force position RIGHT NOW (so you see it immediately)
-        if (newBall.rend != null)
-            newBall.rend.enabled = true;
-
-        newBall.tr.position = path.GetPos(newBall.dist);
-
-        // Debug color (temporary)
-        if (newBall.rend != null)
-            newBall.rend.material.color = Color.red;
-
-        // 4) Insert & resolve
-        balls.Insert(insertIndex, newBall);
-        ResolveSpacing();
-
-        // Apply positions once after resolving (so it snaps correctly)
         ApplyVisuals();
     }
 
-    void ResolveSpacing()
+    GameObject PickBallPrefab(out int colorId)
     {
-        for (int i = 1; i < balls.Count; i++)
+        colorId = Random.Range(0, ballPrefabs.Count);
+        return ballPrefabs[colorId];
+    }
+
+    // Called by OrbShooter when you "hit" a ball (index decided in OrbShooter)
+    public void InsertBallAtHitIndex(int hitIndex, Vector3 worldAimPos)
+    {
+        if (balls == null || balls.Count == 0) return;
+        if (hitIndex < 0 || hitIndex >= balls.Count) return;
+
+        float baseDist = balls[hitIndex].dist;
+
+        // Two valid slots around the hit ball
+        float distBefore = Mathf.Clamp(baseDist + spacing, 0f, path.TotalLength); // toward head
+        float distAfter = Mathf.Clamp(baseDist - spacing, 0f, path.TotalLength); // toward tail
+
+        Vector3 posBefore = path.GetPos(distBefore);
+        Vector3 posAfter = path.GetPos(distAfter);
+
+        // Pick the closer slot to the click/projectile position
+        bool insertBefore = (worldAimPos - posBefore).sqrMagnitude <= (worldAimPos - posAfter).sqrMagnitude;
+
+        float insertDist = insertBefore ? distBefore : distAfter;
+        int insertIndex = insertBefore ? hitIndex : hitIndex + 1;
+        insertIndex = Mathf.Clamp(insertIndex, 0, balls.Count);
+
+        // Spawn new ball from prefab list
+        int colorId;
+        GameObject prefab = PickBallPrefab(out colorId);
+
+        GameObject go = Instantiate(prefab, transform);
+        Renderer r = go.GetComponentInChildren<Renderer>();
+
+        Ball newBall = new Ball
+        {
+            tr = go.transform,
+            dist = insertDist,
+            rend = r,
+            colorId = colorId
+        };
+
+        balls.Insert(insertIndex, newBall);
+
+        ResolveSpacingLocal(insertIndex);
+
+        // Keep headDist aligned with the actual head after insertion
+        headDist = balls[0].dist;
+
+        ApplyVisuals();
+    }
+
+    void ResolveSpacingLocal(int pivot)
+    {
+        // Push toward tail (ensure no overlap)
+        for (int i = pivot + 1; i < balls.Count; i++)
         {
             float maxDist = balls[i - 1].dist - spacing;
             if (balls[i].dist > maxDist)
                 balls[i].dist = maxDist;
         }
 
-        for (int i = balls.Count - 2; i >= 0; i--)
+        // Push toward head (ensure no overlap)
+        for (int i = pivot - 1; i >= 0; i--)
         {
             float minDist = balls[i + 1].dist + spacing;
             if (balls[i].dist < minDist)
@@ -162,7 +169,7 @@ public class ChainController : MonoBehaviour
     {
         for (int i = 0; i < balls.Count; i++)
         {
-            var b = balls[i];
+            Ball b = balls[i];
 
             if (b.rend != null)
                 b.rend.enabled = (b.dist >= 0f);
@@ -174,32 +181,37 @@ public class ChainController : MonoBehaviour
 
     void Update()
     {
+        if (balls == null || balls.Count == 0) return;
+
         float dt = Time.deltaTime;
 
-        // 1) Drive the head
+        // Sync then advance head
+        headDist = balls[0].dist;
         headDist += speed * dt;
         balls[0].dist = headDist;
 
+        // End of path
         if (headDist >= path.TotalLength - endPadding)
         {
             Debug.Log("Reached end of path!");
 
             if (loopForTesting)
             {
-                headDist = 0f; // quick test reset
+                headDist = 0f;
                 balls[0].dist = headDist;
             }
             else
             {
-                enabled = false; // stops the chain (replace with your lose logic)
+                enabled = false;
+                return;
             }
         }
 
-        // 2) Let the rest try to move forward (catch up)
+        // Catch-up drift
         for (int i = 1; i < balls.Count; i++)
             balls[i].dist += catchUpSpeed * dt;
 
-        // 3) Enforce spacing (no overlaps)
+        // Spacing constraint (head -> tail)
         for (int i = 1; i < balls.Count; i++)
         {
             float maxDist = balls[i - 1].dist - spacing;
@@ -207,17 +219,6 @@ public class ChainController : MonoBehaviour
                 balls[i].dist = maxDist;
         }
 
-        // 4) Apply visuals
-        for (int i = 0; i < balls.Count; i++)
-        {
-            var b = balls[i];
-
-            if (b.rend != null)
-                b.rend.enabled = (b.dist >= 0f);
-
-            if (b.dist >= 0f)
-                b.tr.position = path.GetPos(b.dist);
-        }
+        ApplyVisuals();
     }
-
 }
