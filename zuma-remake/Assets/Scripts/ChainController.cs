@@ -11,7 +11,7 @@ public class ChainController : MonoBehaviour
     public int ballCount = 20;
     public float speed = 3f;
     public float spacing = 0.6f;
-    public float startHeadDist = 3f; // IMPORTANT: prevents everything being < 0 at start
+    public float startHeadDist = 3f;
     public float catchUpSpeed = 3f;
 
     private float headDist;
@@ -20,14 +20,14 @@ public class ChainController : MonoBehaviour
     public float endPadding = 0.3f;
     public bool loopForTesting = false;
 
-    private class Ball
+    public class Ball
     {
         public Transform tr;
         public float dist;
         public Renderer rend;
     }
 
-    private readonly List<Ball> balls = new();
+    public List<Ball> balls = new();
 
     void Start()
     {
