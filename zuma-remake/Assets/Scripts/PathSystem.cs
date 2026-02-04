@@ -159,5 +159,8 @@ public class PathSystem : MonoBehaviour
         Gizmos.color = Color.cyan;
         for (int i = 0; i < bakedPoints.Count; i++)
             Gizmos.DrawSphere(bakedPoints[i], gizmoRadius);
+
+        Gizmos.color = Color.red;
+        Gizmos.DrawSphere(GetPos(TotalLength), gizmoRadius * 1.5f);
     }
 }
