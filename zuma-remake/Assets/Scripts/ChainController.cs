@@ -138,32 +138,30 @@ public class ChainController : MonoBehaviour
     }
 
     // Called by OrbShooter when you "hit" a ball (index decided in OrbShooter)
-    public void InsertBallAtHitIndex(int hitIndex, Vector3 worldAimPos)
+    public void InsertBallAtHitIndex(int hitIndex, Vector3 worldAimPos, int colorId)
     {
         if (balls == null || balls.Count == 0) return;
         if (hitIndex < 0 || hitIndex >= balls.Count) return;
+        if (ballPrefabs == null || ballPrefabs.Count == 0) return;
+
+        colorId = Mathf.Clamp(colorId, 0, ballPrefabs.Count - 1);
 
         float baseDist = balls[hitIndex].dist;
 
-        // Two valid slots around the hit ball
-        float distBefore = Mathf.Clamp(baseDist + spacing, 0f, path.TotalLength); // toward head
-        float distAfter = Mathf.Clamp(baseDist - spacing, 0f, path.TotalLength); // toward tail
+        float distBefore = Mathf.Clamp(baseDist + spacing, 0f, path.TotalLength);
+        float distAfter = Mathf.Clamp(baseDist - spacing, 0f, path.TotalLength);
 
         Vector3 posBefore = path.GetPos(distBefore);
         Vector3 posAfter = path.GetPos(distAfter);
 
-        // Pick the closer slot to the click/projectile position
         bool insertBefore = (worldAimPos - posBefore).sqrMagnitude <= (worldAimPos - posAfter).sqrMagnitude;
 
         float insertDist = insertBefore ? distBefore : distAfter;
         int insertIndex = insertBefore ? hitIndex : hitIndex + 1;
         insertIndex = Mathf.Clamp(insertIndex, 0, balls.Count);
 
-        // Spawn new ball from prefab list
-        int colorId;
-        GameObject prefab = PickBallPrefab(out colorId);
-
-        GameObject go = Instantiate(prefab, transform);
+        // Spawn chosen color prefab
+        GameObject go = Instantiate(ballPrefabs[colorId], transform);
         Renderer r = go.GetComponentInChildren<Renderer>();
 
         Ball newBall = new Ball
@@ -177,7 +175,6 @@ public class ChainController : MonoBehaviour
         balls.Insert(insertIndex, newBall);
 
         ResolveSpacingLocal(insertIndex);
-
         headDist = balls[0].dist;
         ApplyVisuals();
 

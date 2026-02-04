@@ -8,6 +8,11 @@ public class OrbShooter : MonoBehaviour
     [Header("Hit Settings (Zuma-style)")]
     public float hitRadius = 0.8f; // tune: roughly ball diameter * 0.9
 
+    [Header("Preview")]
+    public Transform previewSocket;
+    private GameObject previewInstance;
+    public int currentColorId = -1;
+
     // Mouse
     private Vector3 mouseWorldPos;
     private bool hasMousePos;
@@ -20,6 +25,11 @@ public class OrbShooter : MonoBehaviour
     private int debugHitIndex = -1;
     private float debugInsertDist;
     private Vector3 debugInsertWorldPos;
+
+    void Start()
+    {
+        RollNextBall();
+    }
 
     void Update()
     {
@@ -45,8 +55,47 @@ public class OrbShooter : MonoBehaviour
                 return;
             }
 
-            chain.InsertBallAtHitIndex(debugHitIndex, mouseWorldPos);
+            chain.InsertBallAtHitIndex(debugHitIndex, mouseWorldPos, currentColorId);
+            RollNextBall();
         }
+
+        this.transform.rotation = Quaternion.LookRotation(Vector3.forward, mouseWorldPos - this.transform.position);
+    }
+
+    void RollNextBall()
+    {
+        if (!chain || chain.ballPrefabs == null || chain.ballPrefabs.Count == 0)
+        {
+            Debug.LogError("OrbShooter: chain or ballPrefabs missing.");
+            return;
+        }
+
+        currentColorId = Random.Range(0, chain.ballPrefabs.Count);
+
+        // remove old preview
+        if (previewInstance) Destroy(previewInstance);
+
+        if (!previewSocket)
+        {
+            Debug.LogWarning("OrbShooter: previewSocket not assigned.");
+            return;
+        }
+
+        // spawn new preview as a child of socket
+        GameObject prefab = chain.ballPrefabs[currentColorId];
+        previewInstance = Instantiate(prefab, previewSocket);
+
+        // lock it perfectly to the socket
+        previewInstance.transform.localPosition = Vector3.zero;
+        previewInstance.transform.localRotation = Quaternion.identity;
+        previewInstance.transform.localScale = Vector3.one;
+
+        // make sure it doesn't mess with physics
+        foreach (var col in previewInstance.GetComponentsInChildren<Collider>())
+            col.enabled = false;
+
+        var rb = previewInstance.GetComponentInChildren<Rigidbody>();
+        if (rb) rb.isKinematic = true;
     }
 
     int FindHitBallIndex(Vector3 worldPos, float radius)
