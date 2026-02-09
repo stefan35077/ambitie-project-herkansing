@@ -460,6 +460,42 @@ public class ChainController : MonoBehaviour
         ApplyVisuals();
     }
 
+    public int GetRandomExistingColorId()
+    {
+        if (balls == null || balls.Count == 0) return 0;
+
+        bool[] present = new bool[ballPrefabs.Count];
+        int presentCount = 0;
+
+        for (int i = 0; i < balls.Count; i++)
+        {
+            if (balls[i].rend != null && !balls[i].rend.enabled) continue;
+
+            int c = balls[i].colorId;
+            if (c < 0 || c >= present.Length) continue;
+
+            if (!present[c])
+            {
+                present[c] = true;
+                presentCount++;
+            }
+        }
+
+        if (presentCount == 0)
+            return Random.Range(0, ballPrefabs.Count);
+
+        int pick = Random.Range(0, presentCount);
+
+        for (int c = 0; c < present.Length; c++)
+        {
+            if (!present[c]) continue;
+            if (pick == 0) return c;
+            pick--;
+        }
+
+        return 0;
+    }
+
     void OnDrawGizmos()
     {
         if (!Application.isPlaying) return;

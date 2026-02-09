@@ -70,7 +70,7 @@ public class OrbShooter : MonoBehaviour
         if (chain.TryGetOnlyColor(out int only))
             currentColorId = only;
         else
-            currentColorId = Random.Range(0, chain.ballPrefabs.Count);
+            currentColorId = chain.GetRandomExistingColorId();
 
         // remove old preview
         if (previewInstance) Destroy(previewInstance);
