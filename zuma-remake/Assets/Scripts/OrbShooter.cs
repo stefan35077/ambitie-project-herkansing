@@ -13,6 +13,10 @@ public class OrbShooter : MonoBehaviour
     private GameObject previewInstance;
     public int currentColorId = -1;
 
+    [Header("Projectile")]
+    public ProjectileOrb projectilePrefab;
+    public Transform muzzle;
+
     // Mouse
     private Vector3 mouseWorldPos;
     private bool hasMousePos;
@@ -49,14 +53,7 @@ public class OrbShooter : MonoBehaviour
 
         if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
         {
-            if (debugHitIndex == -1)
-            {
-                Debug.Log("No hit: click closer to the chain.");
-                return;
-            }
-
-            chain.InsertBallAtHitIndex(debugHitIndex, mouseWorldPos, currentColorId);
-            RollNextBall();
+            Shoot();
         }
 
         this.transform.rotation = Quaternion.LookRotation(Vector3.forward, mouseWorldPos - this.transform.position);
@@ -149,6 +146,24 @@ public class OrbShooter : MonoBehaviour
         debugInsertWorldPos = chain.path.GetPos(debugInsertDist);
     }
 
+    void Shoot()
+    {
+        var proj = Instantiate(projectilePrefab, muzzle.position, muzzle.rotation);
+        proj.shooter = this;
+        proj.colorId = currentColorId;
+
+        // Spawn visual child directly here (2D-safe)
+        GameObject vis = Instantiate(chain.ballPrefabs[currentColorId], proj.transform);
+        vis.transform.localPosition = Vector3.zero;
+        vis.transform.localRotation = Quaternion.identity;
+        vis.transform.localScale = Vector3.one;
+
+        foreach (var c in vis.GetComponentsInChildren<Collider2D>()) c.enabled = false;
+        foreach (var c in vis.GetComponentsInChildren<Collider>()) c.enabled = false;
+
+        RollNextBall();
+    }
+
     void GetMousePos()
     {
         var cam = Camera.main;
@@ -173,6 +188,13 @@ public class OrbShooter : MonoBehaviour
         {
             hasMousePos = false;
         }
+    }
+
+    public void OnProjectileHitChain(int hitIndex, Vector3 hitWorldPos, int colorId)
+    {
+        if (!chain) return;
+
+        chain.InsertBallAtHitIndex(hitIndex, hitWorldPos, colorId);
     }
 
     void OnDrawGizmos()

@@ -349,6 +349,13 @@ public class ChainController : MonoBehaviour
 
             if (b.dist >= 0f)
                 b.tr.position = path.GetPos(b.dist);
+
+            // keep hit index updated for projectile collision
+            if (b.tr != null)
+            {
+                var hit = b.tr.GetComponentInChildren<ChainBallHit>();
+                if (hit != null) hit.index = i;
+            }
         }
     }
 
