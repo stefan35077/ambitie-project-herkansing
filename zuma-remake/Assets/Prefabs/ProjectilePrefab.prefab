@@ -170,5 +170,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ProjectileOrb
   shooter: {fileID: 0}
   colorId: 0
-  speed: 5
+  speed: 7.5
   lifeTime: 3
+  armDelay: 0.05

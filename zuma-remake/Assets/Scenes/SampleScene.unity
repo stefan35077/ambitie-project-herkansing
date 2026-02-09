@@ -204,7 +204,7 @@ MonoBehaviour:
   ballCount: 12
   startHeadDist: 1.74
   normalSpeed: 1
-  spawnBoostSpeed: 10
+  spawnBoostSpeed: 8
   speedBlend: 4
   gapEps: 0.02
   spacing: 0.65

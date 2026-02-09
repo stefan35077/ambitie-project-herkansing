@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 
 public class ChainController : MonoBehaviour
@@ -14,13 +14,13 @@ public class ChainController : MonoBehaviour
     public float startHeadDist = 3f;
 
     [Header("Speed")]
-    public float normalSpeed;     
-    public float spawnBoostSpeed;   
-    public float speedBlend;
+    public float normalSpeed = 2.5f;
+    public float spawnBoostSpeed = 10f;
+    public float speedBlend = 6f;
     private float speed;
 
     [Header("Chain Reactions")]
-    public float gapEps = 0.02f;          // tolerance for "touching"
+    public float gapEps = 0.02f;                 // tolerance for "touching"
     private bool chainReactionArmed = false;
     private readonly List<bool> gapPrev = new(); // tracks which gaps existed last frame
 
@@ -45,8 +45,26 @@ public class ChainController : MonoBehaviour
 
     private int comboLevel = 0;
 
+    [Header("Stars")]
+    public int star1Score = 500;
+    public int star2Score = 1500;
+    public int star3Score = 3000;
+
+    public int GetStars()
+    {
+        if (score >= star3Score) return 3;
+        if (score >= star2Score) return 2;
+        if (score >= star1Score) return 1;
+        return 0;
+    }
+
     private bool debugHasMatch;
     private int debugMatchStart, debugMatchEnd;
+
+    public System.Action OnLevelWon;
+    public System.Action OnLevelLost;
+
+    bool levelEnded;
 
     struct MatchRange
     {
@@ -75,6 +93,10 @@ public class ChainController : MonoBehaviour
 
     void Start()
     {
+        levelEnded = false;
+        comboLevel = 0;
+        debugHasMatch = false;
+
         if (!path)
         {
             Debug.LogError("ChainController: 'path' is not assigned.");
@@ -145,18 +167,19 @@ public class ChainController : MonoBehaviour
 
         for (int i = 0; i < balls.Count; i++)
         {
-            // ignore hidden balls (if you ever have dist < 0)
+            // ignore hidden balls
             if (balls[i].rend != null && !balls[i].rend.enabled) continue;
 
             int c = balls[i].colorId;
             if (first == -1) first = c;
-            else if (c != first) return false; // found a second color -> not only one
+            else if (c != first) return false;
         }
 
-        if (first == -1) return false; // all were hidden
+        if (first == -1) return false;
         onlyColorId = first;
         return true;
     }
+
     bool TryGetMatchAtIndex(int index, out MatchRange range)
     {
         range = default;
@@ -205,7 +228,6 @@ public class ChainController : MonoBehaviour
     {
         if (balls == null || balls.Count < matchCount) return false;
 
-        // Ensure gapPrev length matches current chain
         if (gapPrev.Count != balls.Count - 1)
             RebuildGapPrev();
 
@@ -217,24 +239,21 @@ public class ChainController : MonoBehaviour
             bool wasGapped = gapPrev[i];
             bool justClosed = wasGapped && !isGappedNow;
 
-            // update tracking for next frame
             gapPrev[i] = isGappedNow;
 
             if (!justClosed) continue;
 
-            // Gap just closed between i and i+1. Check boundary match
             if (balls[i].colorId != balls[i + 1].colorId) continue;
 
             if (TryGetMatchAtIndex(i, out var match))
             {
-                // optional debug outline
                 debugHasMatch = true;
                 debugMatchStart = match.start;
                 debugMatchEnd = match.end;
 
-                comboLevel++;
+                comboLevel++; // reaction step
 
-                int removed = RemoveRange(match.start, match.end);
+                RemoveRange(match.start, match.end);
                 ApplyVisuals();
                 RebuildGapPrev();
                 return true;
@@ -244,14 +263,13 @@ public class ChainController : MonoBehaviour
         return false;
     }
 
-
     GameObject PickBallPrefab(out int colorId)
     {
         colorId = Random.Range(0, ballPrefabs.Count);
         return ballPrefabs[colorId];
     }
 
-    // Called by OrbShooter when you "hit" a ball (index decided in OrbShooter)
+    // Called by OrbShooter when you hit a ball
     public void InsertBallAtHitIndex(int hitIndex, Vector3 worldAimPos, int colorId)
     {
         if (balls == null || balls.Count == 0) return;
@@ -274,7 +292,6 @@ public class ChainController : MonoBehaviour
         int insertIndex = insertBefore ? hitIndex : hitIndex + 1;
         insertIndex = Mathf.Clamp(insertIndex, 0, balls.Count);
 
-        // Spawn chosen color prefab
         GameObject go = Instantiate(ballPrefabs[colorId], transform);
         Renderer r = go.GetComponentInChildren<Renderer>();
 
@@ -290,11 +307,11 @@ public class ChainController : MonoBehaviour
 
         ResolveSpacingLocal(insertIndex);
         headDist = balls[0].dist;
+
+        comboLevel = 0; // player-triggered pop starts combo chain
+
         ApplyVisuals();
 
-        comboLevel = 0;
-
-        // MATCH CHECK + REMOVE
         if (TryGetMatchAtIndex(insertIndex, out var match))
         {
             debugHasMatch = true;
@@ -304,7 +321,6 @@ public class ChainController : MonoBehaviour
             RemoveRange(match.start, match.end);
             ApplyVisuals();
 
-            // ARM chain reactions (gap will close over time)
             chainReactionArmed = true;
             RebuildGapPrev();
         }
@@ -313,15 +329,11 @@ public class ChainController : MonoBehaviour
             debugHasMatch = false;
         }
 
-        // Keep headDist aligned with the actual head after insertion
-        headDist = balls[0].dist;
-
-        ApplyVisuals();
+        headDist = balls.Count > 0 ? balls[0].dist : headDist;
     }
 
     void ResolveSpacingLocal(int pivot)
     {
-        // Push toward tail (ensure no overlap)
         for (int i = pivot + 1; i < balls.Count; i++)
         {
             float maxDist = balls[i - 1].dist - spacing;
@@ -329,7 +341,6 @@ public class ChainController : MonoBehaviour
                 balls[i].dist = maxDist;
         }
 
-        // Push toward head (ensure no overlap)
         for (int i = pivot - 1; i >= 0; i--)
         {
             float minDist = balls[i + 1].dist + spacing;
@@ -350,7 +361,6 @@ public class ChainController : MonoBehaviour
             if (b.dist >= 0f)
                 b.tr.position = path.GetPos(b.dist);
 
-            // keep hit index updated for projectile collision
             if (b.tr != null)
             {
                 var hit = b.tr.GetComponentInChildren<ChainBallHit>();
@@ -375,56 +385,61 @@ public class ChainController : MonoBehaviour
             balls.RemoveAt(i);
         }
 
-        // score calculation
         int mult = 1 + comboLevel * comboStep;
         AddScore(removed * pointsPerOrb * mult);
+
+        if (!levelEnded && (balls == null || balls.Count == 0))
+        {
+            levelEnded = true;
+            OnLevelWon?.Invoke();
+        }
 
         return removed;
     }
 
     void Update()
     {
+        if (levelEnded) return;
         if (balls == null || balls.Count == 0) return;
 
         float dt = Time.deltaTime;
 
-        // Tail-driven push (Zuma-style)
         int tail = balls.Count - 1;
 
-        // If the tail is still < 0, the chain is still "spawning in" -> go fast.
         bool stillSpawning = balls[tail].dist < 0f;
-
-        // Target speed depending on spawn phase
         float targetSpeed = stillSpawning ? spawnBoostSpeed : normalSpeed;
-
-        // Smooth it so it doesn't snap instantly
         speed = Mathf.Lerp(speed, targetSpeed, 1f - Mathf.Exp(-speedBlend * dt));
 
-        // Apply movement
         balls[tail].dist += speed * dt;
 
-        // push forward only when overlapping (no gap pushing)
         for (int i = tail - 1; i >= 0; i--)
         {
-            float minDist = balls[i + 1].dist + spacing; // must be at least spacing ahead of the ball behind it
+            float minDist = balls[i + 1].dist + spacing;
             if (balls[i].dist < minDist)
                 balls[i].dist = minDist;
         }
 
-        // End-of-path check is based on the head reaching the end
         if (balls[0].dist >= path.TotalLength - endPadding)
         {
             Debug.Log("Reached end of path!");
 
             if (loopForTesting)
             {
-                // reset the whole chain by shifting all dists back by head amount
                 float shift = balls[0].dist;
                 for (int i = 0; i < balls.Count; i++)
                     balls[i].dist -= shift;
+
+                RebuildGapPrev();
+                chainReactionArmed = false;
+                comboLevel = 0;
             }
             else
             {
+                if (!levelEnded)
+                {
+                    levelEnded = true;
+                    OnLevelLost?.Invoke();
+                }
                 enabled = false;
                 return;
             }
@@ -432,18 +447,18 @@ public class ChainController : MonoBehaviour
 
         if (chainReactionArmed)
         {
-            // Try one reaction per frame (clean + stable)
             bool removed = TryChainReaction();
 
-            // If no gaps exist anymore and nothing removed, disarm
+            // ✅ FIXED: braces so combo reset only happens when disarming
             if (!removed && !AnyGapNow())
+            {
                 chainReactionArmed = false;
                 comboLevel = 0;
+            }
         }
 
         ApplyVisuals();
     }
-
 
     void OnDrawGizmos()
     {
