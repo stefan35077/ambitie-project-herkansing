@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using UnityEditor;
 using UnityEngine;
 
 public class PathSystem : MonoBehaviour
@@ -168,10 +169,55 @@ public class PathSystem : MonoBehaviour
         return bestDist;
     }
 
+#if UNITY_EDITOR
+    private Vector3[] _lastCPPositions;
+    private int _lastSegments = -1;
+
+    private bool ControlPointsChanged()
+    {
+        if (controlPoints == null) return false;
+
+        if (_lastCPPositions == null || _lastCPPositions.Length != controlPoints.Length)
+            _lastCPPositions = new Vector3[controlPoints.Length];
+
+        bool changed = false;
+
+        for (int i = 0; i < controlPoints.Length; i++)
+        {
+            if (!controlPoints[i]) continue;
+
+            var p = controlPoints[i].position;
+            if (_lastCPPositions[i] != p)
+            {
+                _lastCPPositions[i] = p;
+                changed = true;
+            }
+        }
+
+        if (_lastSegments != segments)
+        {
+            _lastSegments = segments;
+            changed = true;
+        }
+
+        return changed;
+    }
+#endif
 
     void OnDrawGizmos()
     {
         if (!drawGizmos) return;
+
+#if UNITY_EDITOR
+        // Only do editor auto-bake when not playing
+        if (!Application.isPlaying && ControlPointsChanged())
+        {
+            Bake();
+            // helps force a repaint immediately
+            SceneView.RepaintAll();
+        }
+#endif
+
         if (bakedPoints.Count == 0)
         {
             if (controlPoints == null || controlPoints.Length < 4) return;

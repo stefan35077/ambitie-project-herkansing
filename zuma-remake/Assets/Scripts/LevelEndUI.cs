@@ -74,12 +74,16 @@ public class LevelEndUI : MonoBehaviour
         {
             for (int i = 0; i < starImages.Length; i++)
             {
-                if (!starImages[i]) continue;
-
                 if (i < stars)
+                {
                     starImages[i].color = Color.white;
+                    starImages[i].transform.localScale = Vector3.one * 1.1f;
+                }
                 else
+                {
                     starImages[i].color = Color.black;
+                    starImages[i].transform.localScale = Vector3.one;
+                }
             }
         }
     }
