@@ -20,9 +20,9 @@ public class ChainController : MonoBehaviour
     private float speed;
 
     [Header("Chain Reactions")]
-    public float gapEps = 0.02f;                 // tolerance for "touching"
+    public float gapEps = 0.02f;               
     private bool chainReactionArmed = false;
-    private readonly List<bool> gapPrev = new(); // tracks which gaps existed last frame
+    private readonly List<bool> gapPrev = new(); 
 
     [Tooltip("If 0, spacing is auto-calculated from prefab diameter.")]
     public float spacing = 0f;
