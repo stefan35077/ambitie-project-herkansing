@@ -371,24 +371,57 @@ public class ChainController : MonoBehaviour
 
     int RemoveRange(int start, int end)
     {
+        if (balls == null || balls.Count == 0) return 0;
+
         start = Mathf.Clamp(start, 0, balls.Count - 1);
         end = Mathf.Clamp(end, 0, balls.Count - 1);
         if (start > end) return 0;
 
         int removed = (end - start + 1);
 
+        // ---- popup position = middle ball of the removed range ----
+        int mid = (start + end) / 2;
+
+        Vector3 popupPos = transform.position;
+        bool hasPos = false;
+
+        var midTr = balls[mid].tr;
+        if (midTr != null)
+        {
+            popupPos = midTr.position;
+            hasPos = true;
+        }
+        else
+        {
+            // fallback: search nearest valid Transform in the range
+            for (int offset = 1; (mid - offset) >= start || (mid + offset) <= end; offset++)
+            {
+                int a = mid - offset;
+                int b = mid + offset;
+
+                if (a >= start && balls[a].tr != null) { popupPos = balls[a].tr.position; hasPos = true; break; }
+                if (b <= end && balls[b].tr != null) { popupPos = balls[b].tr.position; hasPos = true; break; }
+            }
+        }
+
+        // ---- remove objects ----
         for (int i = end; i >= start; i--)
         {
-            if (balls[i].tr != null)
-                Destroy(balls[i].tr.gameObject);
-
+            var tr = balls[i].tr;
+            if (tr != null) Destroy(tr.gameObject);
             balls.RemoveAt(i);
         }
 
+        // ---- score ----
         int mult = 1 + comboLevel * comboStep;
-        AddScore(removed * pointsPerOrb * mult);
+        int gainedPoints = removed * pointsPerOrb * mult;
+        AddScore(gainedPoints);
 
-        if (!levelEnded && (balls == null || balls.Count == 0))
+        // ---- popup ----
+        if (hasPos)
+            ScorePopup.Spawn(popupPos, gainedPoints);
+
+        if (!levelEnded && balls.Count == 0)
         {
             levelEnded = true;
             OnLevelWon?.Invoke();

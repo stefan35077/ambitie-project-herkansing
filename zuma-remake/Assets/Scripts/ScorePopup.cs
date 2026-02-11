@@ -35,9 +35,8 @@ public class ScorePopup : MonoBehaviour
     {
         if (!_cam) _cam = Camera.main;
 
-        // World -> Screen
         Vector3 screen = _cam.WorldToScreenPoint(worldPos);
-        if (screen.z < 0f) return; // behind camera
+        if (screen.z < 0f) return;
 
         TMP_Text t = Instantiate(popupPrefab, popupParent);
         t.text = $"+{points}";
@@ -45,17 +44,24 @@ public class ScorePopup : MonoBehaviour
 
         RectTransform rt = t.rectTransform;
 
-        // Screen -> UI local position
-        RectTransform canvasRT = canvas.transform as RectTransform;
-        RectTransformUtility.ScreenPointToLocalPointInRectangle(
-            canvasRT, screen,
-            canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : _cam,
-            out Vector2 localPos
-        );
+        if (canvas.renderMode == RenderMode.ScreenSpaceOverlay)
+        {
+            // BEST for overlay: direct screen position (no giant offsets)
+            rt.position = screen;
+        }
+        else
+        {
+            // ScreenSpaceCamera / WorldSpace: convert properly
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                popupParent,
+                screen,
+                canvas.worldCamera ? canvas.worldCamera : _cam,
+                out Vector2 localPos
+            );
+            rt.anchoredPosition = localPos;
+        }
 
-        rt.anchoredPosition = localPos;
         rt.localScale = Vector3.one * startScale;
-
         StartCoroutine(Animate(rt, t));
     }
 
