@@ -190,7 +190,7 @@ public class OrbShooter : MonoBehaviour
         }
     }
 
-    public void OnProjectileHitChain(int hitIndex, Vector3 hitWorldPos, int colorId)
+    public void OnProjectileHitChain(int hitIndex, Vector3 hitWorldPos, int colorId, PowerUpType powerUp)
     {
         if (!chain) return;
 

@@ -5331,7 +5331,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1041518676228630941, guid: e2ae564afcc93dc4e813a0de868f6263, type: 3}
       propertyPath: m_AnchoredPosition.y
-      value: 149
+      value: 731
       objectReference: {fileID: 0}
     - target: {fileID: 1041518676228630941, guid: e2ae564afcc93dc4e813a0de868f6263, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
@@ -5348,6 +5348,10 @@ PrefabInstance:
     - target: {fileID: 7570718723494125169, guid: e2ae564afcc93dc4e813a0de868f6263, type: 3}
       propertyPath: m_Name
       value: ScorePopupText
+      objectReference: {fileID: 0}
+    - target: {fileID: 7570718723494125169, guid: e2ae564afcc93dc4e813a0de868f6263, type: 3}
+      propertyPath: m_IsActive
+      value: 1
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

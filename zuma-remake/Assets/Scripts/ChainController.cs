@@ -50,6 +50,11 @@ public class ChainController : MonoBehaviour
     public int star2Score = 1500;
     public int star3Score = 3000;
 
+    [Header("Freeze")]
+    public float freezeDuration;
+    float freezeTimer;
+    public bool IsFrozen => freezeTimer > 0f;
+
     public int GetStars()
     {
         if (score >= star3Score) return 3;
@@ -89,6 +94,55 @@ public class ChainController : MonoBehaviour
     {
         score += amount;
         OnScoreChanged?.Invoke(score);
+    }
+
+    public void FreezeTrack(float duration)
+    {
+        freezeTimer = Mathf.Max(freezeTimer, duration);
+    }
+
+    public void BlackHoleHit(int hitIndex)
+    {
+        if( balls  == null || balls.Count == 0) return;
+        hitIndex = Mathf.Clamp(hitIndex, 0, balls.Count - 1);
+
+        RemoveRange(hitIndex, hitIndex);
+        ApplyVisuals();
+
+        chainReactionArmed = true;
+        RebuildGapPrev();
+    }
+
+    int ChoooseRainbowColorForInsert(int insertIndex)
+    {
+        int leftColor = (insertIndex - 1 >= 0) ? balls[insertIndex - 1].colorId : -1;
+        int rightColor = (insertIndex < balls.Count) ? balls[insertIndex].colorId : -1;
+
+        if (leftColor < 0) return rightColor;
+        if (rightColor < 0) return leftColor;
+
+        int leftRun = CountRunIfColor(insertIndex, leftColor);
+        int rightRun = CountRunIfColor(insertIndex - 1, rightColor);
+
+        return (rightRun > leftRun) ? rightColor : leftColor;
+    }
+
+    int CountRunIfColor(int insertIndex, int colorId)
+    {
+        int count = 1;
+        // count left run
+        for (int i = insertIndex - 1; i >= 0; i--)
+        {
+            if (balls[i].colorId != colorId) break;
+            count++;
+        }
+        // count right run
+        for (int i = insertIndex; i < balls.Count; i++)
+        {
+            if (balls[i].colorId != colorId) break;
+            count++;
+        }
+        return count;
     }
 
     void Start()
@@ -292,6 +346,15 @@ public class ChainController : MonoBehaviour
         int insertIndex = insertBefore ? hitIndex : hitIndex + 1;
         insertIndex = Mathf.Clamp(insertIndex, 0, balls.Count);
 
+        bool isRainbow = (colorId == -1);
+        int actualColorId = colorId;
+
+        if (isRainbow)
+        {
+            actualColorId = ChoooseRainbowColorForInsert(insertIndex);
+            actualColorId = Mathf.Clamp(actualColorId, 0, ballPrefabs.Count - 1);
+        }
+
         GameObject go = Instantiate(ballPrefabs[colorId], transform);
         Renderer r = go.GetComponentInChildren<Renderer>();
 
@@ -436,6 +499,13 @@ public class ChainController : MonoBehaviour
         if (balls == null || balls.Count == 0) return;
 
         float dt = Time.deltaTime;
+
+        if(freezeTimer > 0f)
+        {
+            freezeTimer -= dt;
+            ApplyVisuals();
+            return;
+        }
 
         int tail = balls.Count - 1;
 

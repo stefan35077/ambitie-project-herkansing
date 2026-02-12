@@ -7,9 +7,11 @@ public class ProjectileOrb : MonoBehaviour
     [HideInInspector] public OrbShooter shooter;
     [HideInInspector] public int colorId;
 
+    public PowerUpType powerUp = PowerUpType.None;
+
     public float speed = 25f;
     public float lifeTime = 3f;
-    public float armDelay = 0.05f; // prevents instant hit on spawn
+    public float armDelay = 0.05f;
 
     Rigidbody2D rb;
     float life;
@@ -28,7 +30,6 @@ public class ProjectileOrb : MonoBehaviour
 
     void Start()
     {
-        // Give it velocity ONCE (not every frame)
         rb.linearVelocity = (Vector2)transform.up * speed;
     }
 
@@ -49,7 +50,7 @@ public class ProjectileOrb : MonoBehaviour
         var hit = other.GetComponentInParent<ChainBallHit>();
         if (!hit) return;
 
-        shooter.OnProjectileHitChain(hit.index, transform.position, colorId);
+        shooter.OnProjectileHitChain(hit.index, transform.position, colorId, powerUp);
         Destroy(gameObject);
     }
 }
