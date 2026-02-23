@@ -14,3 +14,17 @@
 * Next sprint I need to finish all the gameplay and UI, so that I can spend my last sprint on polishing the game.
 ----
 
+## Second Review [23/02/2026]
+#### What new features were shown off:
+* This review I showed off the menu and the finished level system.
+
+#### Received feedback:
+* My priorities were good, but the game does need some more visuals.
+
+#### What you will do with the feedback:
+* After the powerups are done I will add better visuals and audio.
+
+#### Priorities for next sprint:
+* Next sprint priority 1 is finished the power-ups, after that I need to finish the audio and visuals.
+----
+

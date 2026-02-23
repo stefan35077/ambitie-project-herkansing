@@ -591,7 +591,7 @@ MonoBehaviour:
   - {fileID: 7597469843830172308, guid: bc0f368de204dea42875b24cff34885a, type: 3}
   - {fileID: 7597469843830172308, guid: f82612b1fdce2204b86a2d14cd2efd7f, type: 3}
   - {fileID: 7597469843830172308, guid: 11434dcf07f02dd4e9b4e51b69f6b8f0, type: 3}
-  ballCount: 24
+  ballCount: 18
   startHeadDist: 1.74
   normalSpeed: 1
   spawnBoostSpeed: 8
@@ -3100,8 +3100,6 @@ MonoBehaviour:
   retryButton: {fileID: 783216033}
   menuSceneName: Menu
   nextSceneName: 
-  levelIndex: -1
-  starsKeyPrefix: LevelStars_
 --- !u!114 &1153542145
 MonoBehaviour:
   m_ObjectHideFlags: 0

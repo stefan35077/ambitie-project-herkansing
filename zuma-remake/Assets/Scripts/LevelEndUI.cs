@@ -26,6 +26,10 @@ public class LevelEndUI : MonoBehaviour
     public string menuSceneName = "Menu";
     public string nextSceneName = "";
 
+    [Header("Progress Save")]
+    public int levelIndex = -1;
+    public string starsKeyPrefix = "LevelStars_";
+
     bool ended;
 
     void Awake()
@@ -57,6 +61,20 @@ public class LevelEndUI : MonoBehaviour
         }
     }
 
+    void SaveStars(int stars)
+    {
+        int idx = (levelIndex >= 0) ? levelIndex : SceneManager.GetActiveScene().buildIndex;
+
+        string key = $"{starsKeyPrefix}{idx}";
+
+        int prev = PlayerPrefs.GetInt(key, 0);
+        if (stars > prev)
+        {
+            PlayerPrefs.SetInt(key, stars);
+            PlayerPrefs.Save();
+        }
+    }
+
     void OnWin()
     {
         if (ended) return;
@@ -70,6 +88,8 @@ public class LevelEndUI : MonoBehaviour
         if (scoreText) scoreText.text = chain.score.ToString();
 
         int stars = chain.GetStars();
+        SaveStars(stars);
+
         if (starImages != null)
         {
             for (int i = 0; i < starImages.Length; i++)
