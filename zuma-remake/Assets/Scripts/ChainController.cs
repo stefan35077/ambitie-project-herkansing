@@ -50,10 +50,17 @@ public class ChainController : MonoBehaviour
     public int star2Score = 1500;
     public int star3Score = 3000;
 
-    [Header("Freeze")]
-    public float freezeDuration;
+    [Header("Powerups")]
+    public bool frozen;
+    float frozenTimer;
+
     float freezeTimer;
-    public bool IsFrozen => freezeTimer > 0f;
+
+    public void Freeze(float seconds)
+    {
+        frozen = true;
+        frozenTimer = Mathf.Max(frozenTimer, seconds);
+    }
 
     public int GetStars()
     {
@@ -83,7 +90,7 @@ public class ChainController : MonoBehaviour
         public Transform tr;
         public float dist;
         public Renderer rend;
-        public int colorId; // index in ballPrefabs
+        public int colorId;
     }
 
     [Header("Runtime Chain (read-only)")]
@@ -94,11 +101,6 @@ public class ChainController : MonoBehaviour
     {
         score += amount;
         OnScoreChanged?.Invoke(score);
-    }
-
-    public void FreezeTrack(float duration)
-    {
-        freezeTimer = Mathf.Max(freezeTimer, duration);
     }
 
     public void BlackHoleHit(int hitIndex)
@@ -183,7 +185,6 @@ public class ChainController : MonoBehaviour
 
         headDist = startHeadDist;
 
-        // Spawn initial chain
         balls.Clear();
         for (int i = 0; i < ballCount; i++)
         {
@@ -221,7 +222,6 @@ public class ChainController : MonoBehaviour
 
         for (int i = 0; i < balls.Count; i++)
         {
-            // ignore hidden balls
             if (balls[i].rend != null && !balls[i].rend.enabled) continue;
 
             int c = balls[i].colorId;
@@ -240,20 +240,55 @@ public class ChainController : MonoBehaviour
         if (balls == null || balls.Count == 0) return false;
         if (index < 0 || index >= balls.Count) return false;
 
-        int color = balls[index].colorId;
+        int baseColor = GetMatchBaseColor(index);
+        if (baseColor < 0) return false;
 
         int left = index;
-        while (left - 1 >= 0 && balls[left - 1].colorId == color)
+        while (left - 1 >= 0 && IsMatchColor(balls[left - 1].colorId, baseColor))
             left--;
 
         int right = index;
-        while (right + 1 < balls.Count && balls[right + 1].colorId == color)
+        while (right + 1 < balls.Count && IsMatchColor(balls[right + 1].colorId, baseColor))
             right++;
 
         range.start = left;
         range.end = right;
 
         return range.Count >= matchCount;
+    }
+
+    bool IsMatchColor(int c, int baseColor)
+    {
+        return c == baseColor || c == -1;
+    }
+
+    int GetMatchBaseColor(int index)
+    {
+        if (balls[index].colorId >= 0) return balls[index].colorId;
+
+        for (int r = 1; r < balls.Count; r++)
+        {
+            int L = index - r;
+            int R = index + r;
+
+            if (L >= 0 && balls[L].colorId >= 0) return balls[L].colorId;
+            if (R < balls.Count && balls[R].colorId >= 0) return balls[R].colorId;
+        }
+
+        return -1;
+    }
+
+    public void DestroyBallAtHitIndex(int hitIndex)
+    {
+        if (levelEnded) return;
+        if (balls == null || balls.Count == 0) return;
+        if (hitIndex < 0 || hitIndex >= balls.Count) return;
+
+        RemoveRange(hitIndex, hitIndex);
+        ApplyVisuals();
+
+        chainReactionArmed = true;
+        RebuildGapPrev();
     }
 
     void RebuildGapPrev()
@@ -330,7 +365,9 @@ public class ChainController : MonoBehaviour
         if (hitIndex < 0 || hitIndex >= balls.Count) return;
         if (ballPrefabs == null || ballPrefabs.Count == 0) return;
 
-        colorId = Mathf.Clamp(colorId, 0, ballPrefabs.Count - 1);
+        bool isRainbow = (colorId == -1);
+        if (!isRainbow)
+            colorId = Mathf.Clamp(colorId, 0, ballPrefabs.Count - 1);
 
         float baseDist = balls[hitIndex].dist;
 
@@ -346,7 +383,6 @@ public class ChainController : MonoBehaviour
         int insertIndex = insertBefore ? hitIndex : hitIndex + 1;
         insertIndex = Mathf.Clamp(insertIndex, 0, balls.Count);
 
-        bool isRainbow = (colorId == -1);
         int actualColorId = colorId;
 
         if (isRainbow)
@@ -371,7 +407,7 @@ public class ChainController : MonoBehaviour
         ResolveSpacingLocal(insertIndex);
         headDist = balls[0].dist;
 
-        comboLevel = 0; // player-triggered pop starts combo chain
+        comboLevel = 0;
 
         ApplyVisuals();
 
@@ -500,26 +536,32 @@ public class ChainController : MonoBehaviour
 
         float dt = Time.deltaTime;
 
-        if(freezeTimer > 0f)
+        if (frozen)
         {
-            freezeTimer -= dt;
-            ApplyVisuals();
-            return;
+            frozenTimer -= dt;
+            if (frozenTimer <= 0f)
+            {
+                frozen = false;
+                frozenTimer = 0f;
+            }
         }
 
-        int tail = balls.Count - 1;
-
-        bool stillSpawning = balls[tail].dist < 0f;
-        float targetSpeed = stillSpawning ? spawnBoostSpeed : normalSpeed;
-        speed = Mathf.Lerp(speed, targetSpeed, 1f - Mathf.Exp(-speedBlend * dt));
-
-        balls[tail].dist += speed * dt;
-
-        for (int i = tail - 1; i >= 0; i--)
+        if (!frozen)
         {
-            float minDist = balls[i + 1].dist + spacing;
-            if (balls[i].dist < minDist)
-                balls[i].dist = minDist;
+            int tail = balls.Count - 1;
+
+            bool stillSpawning = balls[tail].dist < 0f;
+            float targetSpeed = stillSpawning ? spawnBoostSpeed : normalSpeed;
+            speed = Mathf.Lerp(speed, targetSpeed, 1f - Mathf.Exp(-speedBlend * dt));
+
+            balls[tail].dist += speed * dt;
+
+            for (int i = tail - 1; i >= 0; i--)
+            {
+                float minDist = balls[i + 1].dist + spacing;
+                if (balls[i].dist < minDist)
+                    balls[i].dist = minDist;
+            }
         }
 
         if (balls[0].dist >= path.TotalLength - endPadding)
@@ -552,7 +594,6 @@ public class ChainController : MonoBehaviour
         {
             bool removed = TryChainReaction();
 
-            // ✅ FIXED: braces so combo reset only happens when disarming
             if (!removed && !AnyGapNow())
             {
                 chainReactionArmed = false;

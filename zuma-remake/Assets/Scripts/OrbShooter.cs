@@ -6,7 +6,7 @@ public class OrbShooter : MonoBehaviour
     public ChainController chain;
 
     [Header("Hit Settings (Zuma-style)")]
-    public float hitRadius = 0.8f; // tune: roughly ball diameter * 0.9
+    public float hitRadius = 0.8f;
 
     [Header("Preview")]
     public Transform previewSocket;
@@ -17,15 +17,24 @@ public class OrbShooter : MonoBehaviour
     public ProjectileOrb projectilePrefab;
     public Transform muzzle;
 
+    [Header("Projectile Visuals")]
+    public GameObject normalProjectileVisual;
+    public GameObject rainbowProjectileVisual;
+    public GameObject freezeProjectileVisual;
+    public GameObject blackHoleProjectileVisual;
+
+    [Header("Powerups")]
+    public PowerUpType nextShotType = PowerUpType.None;
+    public float freezeSeconds = 2.5f;
+
     // Mouse
     private Vector3 mouseWorldPos;
     private bool hasMousePos;
 
-    // Path projection (still useful for debugging)
+    // Debug (path projection + gizmos)
     private float mouseDistOnPath;
     private Vector3 mouseClosestPoint;
 
-    // Debug gizmos
     private int debugHitIndex = -1;
     private float debugInsertDist;
     private Vector3 debugInsertWorldPos;
@@ -42,21 +51,33 @@ public class OrbShooter : MonoBehaviour
         GetMousePos();
         if (!hasMousePos) return;
 
-        // Keep this for debug (not for choosing hit ball)
         mouseDistOnPath = chain.path.GetClosestDistanceOnPath(mouseWorldPos, out mouseClosestPoint);
 
-        // Choose which ball you're "hitting" in world space (Zuma rule)
         debugHitIndex = FindHitBallIndex(mouseWorldPos, hitRadius);
-
-        // Compute planned insert spot for gizmos
         ComputeDebugInsertFromHit();
 
         if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
-        {
             Shoot();
-        }
 
-        this.transform.rotation = Quaternion.LookRotation(Vector3.forward, mouseWorldPos - this.transform.position);
+        transform.rotation = Quaternion.LookRotation(Vector3.forward, mouseWorldPos - transform.position);
+    }
+
+    GameObject GetProjectileVisualPrefab(int colorId)
+    {
+        switch (nextShotType)
+        {
+            case PowerUpType.BlackHole: return blackHoleProjectileVisual;
+            case PowerUpType.Rainbow: return rainbowProjectileVisual;
+            case PowerUpType.Freeze: return freezeProjectileVisual;
+            default:
+                if (normalProjectileVisual) return normalProjectileVisual;
+                if (chain && chain.ballPrefabs != null && chain.ballPrefabs.Count > 0)
+                {
+                    int id = Mathf.Clamp(colorId, 0, chain.ballPrefabs.Count - 1);
+                    return chain.ballPrefabs[id];
+                }
+                return null;
+        }
     }
 
     void RollNextBall()
@@ -72,7 +93,6 @@ public class OrbShooter : MonoBehaviour
         else
             currentColorId = chain.GetRandomExistingColorId();
 
-        // remove old preview
         if (previewInstance) Destroy(previewInstance);
 
         if (!previewSocket)
@@ -81,21 +101,38 @@ public class OrbShooter : MonoBehaviour
             return;
         }
 
-        // spawn new preview as a child of socket
         GameObject prefab = chain.ballPrefabs[currentColorId];
         previewInstance = Instantiate(prefab, previewSocket);
 
-        // lock it perfectly to the socket
         previewInstance.transform.localPosition = Vector3.zero;
         previewInstance.transform.localRotation = Quaternion.identity;
         previewInstance.transform.localScale = Vector3.one;
 
-        // make sure it doesn't mess with physics
-        foreach (var col in previewInstance.GetComponentsInChildren<Collider>())
+        // 2D project: disable 2D colliders on preview
+        foreach (var col in previewInstance.GetComponentsInChildren<Collider2D>())
             col.enabled = false;
 
-        var rb = previewInstance.GetComponentInChildren<Rigidbody>();
-        if (rb) rb.isKinematic = true;
+        var rb2d = previewInstance.GetComponentInChildren<Rigidbody2D>();
+        if (rb2d) rb2d.simulated = false;
+    }
+
+    void Shoot()
+    {
+        if (!projectilePrefab || !muzzle) return;
+
+        // Snapshot shot data NOW (so it doesn't change after RollNextBall)
+        int shotColor = currentColorId;
+        PowerUpType shotType = nextShotType;
+
+        var proj = Instantiate(projectilePrefab, muzzle.position, transform.rotation);
+        proj.shooter = this;
+        proj.colorId = shotColor;
+        proj.shotType = shotType;
+
+        proj.SetVisual(GetProjectileVisualPrefab(shotColor));
+
+        // Like Zuma: immediately show next ball after firing
+        RollNextBall();
     }
 
     int FindHitBallIndex(Vector3 worldPos, float radius)
@@ -108,8 +145,6 @@ public class OrbShooter : MonoBehaviour
         for (int i = 0; i < chain.balls.Count; i++)
         {
             var b = chain.balls[i];
-
-            // Ignore hidden balls (dist < 0)
             if (b.rend != null && !b.rend.enabled) continue;
 
             float sqr = (worldPos - b.tr.position).sqrMagnitude;
@@ -139,29 +174,10 @@ public class OrbShooter : MonoBehaviour
         Vector3 posBefore = chain.path.GetPos(distBefore);
         Vector3 posAfter = chain.path.GetPos(distAfter);
 
-        // Pick the closer of the two valid slots around the hit ball
         bool insertBefore = (mouseWorldPos - posBefore).sqrMagnitude <= (mouseWorldPos - posAfter).sqrMagnitude;
 
         debugInsertDist = insertBefore ? distBefore : distAfter;
         debugInsertWorldPos = chain.path.GetPos(debugInsertDist);
-    }
-
-    void Shoot()
-    {
-        var proj = Instantiate(projectilePrefab, muzzle.position, muzzle.rotation);
-        proj.shooter = this;
-        proj.colorId = currentColorId;
-
-        // Spawn visual child directly here (2D-safe)
-        GameObject vis = Instantiate(chain.ballPrefabs[currentColorId], proj.transform);
-        vis.transform.localPosition = Vector3.zero;
-        vis.transform.localRotation = Quaternion.identity;
-        vis.transform.localScale = Vector3.one;
-
-        foreach (var c in vis.GetComponentsInChildren<Collider2D>()) c.enabled = false;
-        foreach (var c in vis.GetComponentsInChildren<Collider>()) c.enabled = false;
-
-        RollNextBall();
     }
 
     void GetMousePos()
@@ -175,7 +191,6 @@ public class OrbShooter : MonoBehaviour
 
         Ray ray = cam.ScreenPointToRay(screenPos);
 
-        // Match your game plane (you used z-plane)
         float zPlane = chain ? chain.transform.position.z : 0f;
         Plane plane = new Plane(Vector3.forward, new Vector3(0f, 0f, zPlane));
 
@@ -184,45 +199,56 @@ public class OrbShooter : MonoBehaviour
             mouseWorldPos = ray.GetPoint(enter);
             hasMousePos = true;
         }
-        else
-        {
-            hasMousePos = false;
-        }
+        else hasMousePos = false;
     }
 
-    public void OnProjectileHitChain(int hitIndex, Vector3 hitWorldPos, int colorId, PowerUpType powerUp)
+    // Called by ProjectileOrb on collision
+    public void OnProjectileHitChain(int hitIndex, Vector3 hitWorldPos, int colorId, PowerUpType shotType)
     {
         if (!chain) return;
 
-        chain.InsertBallAtHitIndex(hitIndex, hitWorldPos, colorId);
+        switch (shotType)
+        {
+            case PowerUpType.BlackHole:
+                chain.DestroyBallAtHitIndex(hitIndex);
+                break;
+
+            case PowerUpType.Freeze:
+                chain.InsertBallAtHitIndex(hitIndex, hitWorldPos, colorId);
+                chain.Freeze(freezeSeconds);
+                break;
+
+            case PowerUpType.Rainbow:
+                chain.InsertBallAtHitIndex(hitIndex, hitWorldPos, -1); // -1 => rainbow
+                break;
+
+            default:
+                chain.InsertBallAtHitIndex(hitIndex, hitWorldPos, colorId);
+                break;
+        }
     }
 
     void OnDrawGizmos()
     {
         if (!hasMousePos) return;
 
-        // Mouse position
         Gizmos.color = Color.red;
         Gizmos.DrawSphere(mouseWorldPos, 0.20f);
 
-        // Closest point on path (debug only)
         Gizmos.color = Color.green;
         Gizmos.DrawSphere(mouseClosestPoint, 0.22f);
         Gizmos.DrawLine(mouseWorldPos, mouseClosestPoint);
 
         if (!chain || chain.balls == null || chain.balls.Count == 0) return;
 
-        // Hit radius visualization
         Gizmos.color = new Color(1f, 1f, 1f, 0.25f);
         Gizmos.DrawWireSphere(mouseWorldPos, hitRadius);
 
-        // Hit ball
         if (debugHitIndex >= 0 && debugHitIndex < chain.balls.Count)
         {
             Gizmos.color = Color.yellow;
             Gizmos.DrawSphere(chain.balls[debugHitIndex].tr.position, 0.24f);
 
-            // Planned insert spot (slot before/after)
             Gizmos.color = Color.cyan;
             Gizmos.DrawSphere(debugInsertWorldPos, 0.26f);
             Gizmos.DrawLine(chain.balls[debugHitIndex].tr.position, debugInsertWorldPos);
