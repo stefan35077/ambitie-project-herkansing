@@ -56,6 +56,11 @@ public class ChainController : MonoBehaviour
 
     float freezeTimer;
 
+    [Header("Audio")]
+    public AudioSource audioSource;
+    public AudioClip matchClip;
+    [Range(0f, 0.15f)] public float matchPitchJitter = 0.05f;
+
     public void Freeze(float seconds)
     {
         frozen = true;
@@ -340,7 +345,7 @@ public class ChainController : MonoBehaviour
                 debugMatchStart = match.start;
                 debugMatchEnd = match.end;
 
-                comboLevel++; // reaction step
+                comboLevel++;
 
                 RemoveRange(match.start, match.end);
                 ApplyVisuals();
@@ -358,7 +363,6 @@ public class ChainController : MonoBehaviour
         return ballPrefabs[colorId];
     }
 
-    // Called by OrbShooter when you hit a ball
     public void InsertBallAtHitIndex(int hitIndex, Vector3 worldAimPos, int colorId)
     {
         if (balls == null || balls.Count == 0) return;
@@ -366,6 +370,7 @@ public class ChainController : MonoBehaviour
         if (ballPrefabs == null || ballPrefabs.Count == 0) return;
 
         bool isRainbow = (colorId == -1);
+
         if (!isRainbow)
             colorId = Mathf.Clamp(colorId, 0, ballPrefabs.Count - 1);
 
@@ -383,15 +388,10 @@ public class ChainController : MonoBehaviour
         int insertIndex = insertBefore ? hitIndex : hitIndex + 1;
         insertIndex = Mathf.Clamp(insertIndex, 0, balls.Count);
 
-        int actualColorId = colorId;
+        int actualColorId = isRainbow ? ChoooseRainbowColorForInsert(insertIndex) : colorId;
+        actualColorId = Mathf.Clamp(actualColorId, 0, ballPrefabs.Count - 1);
 
-        if (isRainbow)
-        {
-            actualColorId = ChoooseRainbowColorForInsert(insertIndex);
-            actualColorId = Mathf.Clamp(actualColorId, 0, ballPrefabs.Count - 1);
-        }
-
-        GameObject go = Instantiate(ballPrefabs[colorId], transform);
+        GameObject go = Instantiate(ballPrefabs[actualColorId], transform);
         Renderer r = go.GetComponentInChildren<Renderer>();
 
         Ball newBall = new Ball
@@ -399,7 +399,7 @@ public class ChainController : MonoBehaviour
             tr = go.transform,
             dist = insertDist,
             rend = r,
-            colorId = colorId
+            colorId = actualColorId
         };
 
         balls.Insert(insertIndex, newBall);
@@ -515,6 +515,15 @@ public class ChainController : MonoBehaviour
         int mult = 1 + comboLevel * comboStep;
         int gainedPoints = removed * pointsPerOrb * mult;
         AddScore(gainedPoints);
+
+        if (audioSource && matchClip)
+        {
+            float prevPitch = audioSource.pitch;
+            audioSource.pitch = 1f + Random.Range(-matchPitchJitter, matchPitchJitter);
+            audioSource.PlayOneShot(matchClip);
+            audioSource.pitch = prevPitch;
+        }
+
 
         // ---- popup ----
         if (hasPos)

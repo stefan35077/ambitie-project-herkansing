@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.InputSystem;
 
 public class OrbShooter : MonoBehaviour
@@ -7,6 +7,11 @@ public class OrbShooter : MonoBehaviour
 
     [Header("Hit Settings (Zuma-style)")]
     public float hitRadius = 0.8f;
+
+    [Header("Audio")]
+    public AudioSource audioSource;
+    public AudioClip shootClip;
+    public AudioClip powerupRollClip;
 
     [Header("Preview")]
     public Transform previewSocket;
@@ -17,7 +22,7 @@ public class OrbShooter : MonoBehaviour
     public ProjectileOrb projectilePrefab;
     public Transform muzzle;
 
-    [Header("Projectile Visuals")]
+    [Header("Projectile Sprites")]
     public GameObject normalProjectileVisual;
     public GameObject rainbowProjectileVisual;
     public GameObject freezeProjectileVisual;
@@ -27,11 +32,20 @@ public class OrbShooter : MonoBehaviour
     public PowerUpType nextShotType = PowerUpType.None;
     public float freezeSeconds = 2.5f;
 
-    // Mouse
+    [Header("Powerup Chances")]
+    [Range(0f, 1f)] public float powerupChance = 0.12f;
+    [Range(0f, 1f)] public float freezeWeight = 0.45f;
+    [Range(0f, 1f)] public float rainbowWeight = 0.35f;
+    [Range(0f, 1f)] public float blackHoleWeight = 0.20f;
+
+
+    [Header("Fire Rate")]
+    public float shootCooldown = 0.15f;
+    private float shootTimer;
+
     private Vector3 mouseWorldPos;
     private bool hasMousePos;
 
-    // Debug (path projection + gizmos)
     private float mouseDistOnPath;
     private Vector3 mouseClosestPoint;
 
@@ -56,28 +70,55 @@ public class OrbShooter : MonoBehaviour
         debugHitIndex = FindHitBallIndex(mouseWorldPos, hitRadius);
         ComputeDebugInsertFromHit();
 
+        shootTimer -= Time.deltaTime;
+
         if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
-            Shoot();
+        {
+            if (shootTimer <= 0f)
+            {
+                Shoot();
+                shootTimer = shootCooldown;
+            }
+        }
 
         transform.rotation = Quaternion.LookRotation(Vector3.forward, mouseWorldPos - transform.position);
     }
 
     GameObject GetProjectileVisualPrefab(int colorId)
     {
+        // powerups override visuals
         switch (nextShotType)
         {
             case PowerUpType.BlackHole: return blackHoleProjectileVisual;
             case PowerUpType.Rainbow: return rainbowProjectileVisual;
             case PowerUpType.Freeze: return freezeProjectileVisual;
-            default:
-                if (normalProjectileVisual) return normalProjectileVisual;
-                if (chain && chain.ballPrefabs != null && chain.ballPrefabs.Count > 0)
-                {
-                    int id = Mathf.Clamp(colorId, 0, chain.ballPrefabs.Count - 1);
-                    return chain.ballPrefabs[id];
-                }
-                return null;
         }
+
+        // normal shot: use the actual color prefab
+        if (chain != null && chain.ballPrefabs != null &&
+            colorId >= 0 && colorId < chain.ballPrefabs.Count)
+            return chain.ballPrefabs[colorId];
+
+        return normalProjectileVisual;
+    }
+
+    void RollNextShotType()
+    {
+        if (Random.value > powerupChance)
+        {
+            nextShotType = PowerUpType.None;
+            return;
+        }
+
+        float total = freezeWeight + rainbowWeight + blackHoleWeight;
+        float r = Random.value * total;
+
+        if (r < freezeWeight) nextShotType = PowerUpType.Freeze;
+        else if (r < freezeWeight + rainbowWeight) nextShotType = PowerUpType.Rainbow;
+        else nextShotType = PowerUpType.BlackHole;
+
+        if (audioSource && powerupRollClip)
+            audioSource.PlayOneShot(powerupRollClip);
     }
 
     void RollNextBall()
@@ -87,6 +128,8 @@ public class OrbShooter : MonoBehaviour
             Debug.LogError("OrbShooter: chain or ballPrefabs missing.");
             return;
         }
+
+        RollNextShotType(); // ✅ THIS is why powerups start showing up
 
         if (chain.TryGetOnlyColor(out int only))
             currentColorId = only;
@@ -101,37 +144,40 @@ public class OrbShooter : MonoBehaviour
             return;
         }
 
-        GameObject prefab = chain.ballPrefabs[currentColorId];
-        previewInstance = Instantiate(prefab, previewSocket);
+        // ✅ preview shows powerup visual, otherwise shows the color ball prefab
+        GameObject previewPrefab = GetProjectileVisualPrefab(currentColorId);
+        previewInstance = Instantiate(previewPrefab, previewSocket);
 
         previewInstance.transform.localPosition = Vector3.zero;
         previewInstance.transform.localRotation = Quaternion.identity;
         previewInstance.transform.localScale = Vector3.one;
 
-        // 2D project: disable 2D colliders on preview
-        foreach (var col in previewInstance.GetComponentsInChildren<Collider2D>())
+        foreach (var col in previewInstance.GetComponentsInChildren<Collider2D>(true))
             col.enabled = false;
 
-        var rb2d = previewInstance.GetComponentInChildren<Rigidbody2D>();
-        if (rb2d) rb2d.simulated = false;
+        foreach (var rb in previewInstance.GetComponentsInChildren<Rigidbody2D>(true))
+        {
+            rb.simulated = false;
+            rb.bodyType = RigidbodyType2D.Kinematic;
+        }
     }
 
     void Shoot()
     {
         if (!projectilePrefab || !muzzle) return;
 
-        // Snapshot shot data NOW (so it doesn't change after RollNextBall)
-        int shotColor = currentColorId;
-        PowerUpType shotType = nextShotType;
+        if (audioSource && shootClip)
+            audioSource.PlayOneShot(shootClip);
 
         var proj = Instantiate(projectilePrefab, muzzle.position, transform.rotation);
         proj.shooter = this;
-        proj.colorId = shotColor;
-        proj.shotType = shotType;
+        proj.colorId = currentColorId;
+        proj.shotType = nextShotType;
 
-        proj.SetVisual(GetProjectileVisualPrefab(shotColor));
+        proj.SetVisual(GetProjectileVisualPrefab(currentColorId));
 
-        // Like Zuma: immediately show next ball after firing
+        nextShotType = PowerUpType.None;
+
         RollNextBall();
     }
 
@@ -202,7 +248,6 @@ public class OrbShooter : MonoBehaviour
         else hasMousePos = false;
     }
 
-    // Called by ProjectileOrb on collision
     public void OnProjectileHitChain(int hitIndex, Vector3 hitWorldPos, int colorId, PowerUpType shotType)
     {
         if (!chain) return;
@@ -219,7 +264,7 @@ public class OrbShooter : MonoBehaviour
                 break;
 
             case PowerUpType.Rainbow:
-                chain.InsertBallAtHitIndex(hitIndex, hitWorldPos, -1); // -1 => rainbow
+                chain.InsertBallAtHitIndex(hitIndex, hitWorldPos, -1);
                 break;
 
             default:

@@ -15,6 +15,9 @@ public class LevelSelectButton : MonoBehaviour
     public Image[] starImages;
     public string starsKeyPrefix = "LevelStars_";
 
+    [Header("Audio")]
+    public AudioSource clickSound;
+
     void Start()
     {
         UpdateStarsUI();
@@ -68,5 +71,11 @@ public class LevelSelectButton : MonoBehaviour
             SceneManager.LoadScene(buildIndex);
         else
             Debug.LogError("LevelSelectButton: sceneName empty AND buildIndex < 0");
+    }
+
+    public void PlayClickSound()
+    {
+               if (clickSound)
+            clickSound.Play();
     }
 }

@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 [RequireComponent(typeof(Rigidbody2D))]
 [RequireComponent(typeof(Collider2D))]
@@ -13,25 +13,27 @@ public class ProjectileOrb : MonoBehaviour
     public float armDelay = 0.05f;
 
     Rigidbody2D rb;
+    Collider2D col;
+
     float life;
     float armTimer;
 
-    GameObject visualInstance;
+    Transform visualRoot;
 
     void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
+        col = GetComponent<Collider2D>();
+
         rb.gravityScale = 0f;
         rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
         rb.interpolation = RigidbodyInterpolation2D.Interpolate;
 
-        var col = GetComponent<Collider2D>();
         col.isTrigger = true;
     }
 
     void Start()
     {
-        // fire once
         rb.linearVelocity = (Vector2)transform.up * speed;
     }
 
@@ -44,35 +46,27 @@ public class ProjectileOrb : MonoBehaviour
             Destroy(gameObject);
     }
 
-    /// <summary>
-    /// Assigns a visual prefab to this projectile.
-    /// Visual is a CHILD and has NO colliders.
-    /// </summary>
     public void SetVisual(GameObject visualPrefab)
     {
+        if (visualRoot) Destroy(visualRoot.gameObject);
+
         if (!visualPrefab) return;
 
-        // remove old visual if any
-        if (visualInstance)
-            Destroy(visualInstance);
+        var go = Instantiate(visualPrefab, transform);
+        visualRoot = go.transform;
 
-        visualInstance = Instantiate(visualPrefab, transform);
-        visualInstance.transform.localPosition = Vector3.zero;
-        visualInstance.transform.localRotation = Quaternion.identity;
-        visualInstance.transform.localScale = Vector3.one;
+        visualRoot.localPosition = Vector3.zero;
+        visualRoot.localRotation = Quaternion.identity;
+        visualRoot.localScale = Vector3.one;
 
-        // IMPORTANT: visuals must not collide
-        foreach (var c in visualInstance.GetComponentsInChildren<Collider2D>())
+        foreach (var c in go.GetComponentsInChildren<Collider2D>(true))
             c.enabled = false;
 
-        foreach (var c in visualInstance.GetComponentsInChildren<Collider>())
-            c.enabled = false;
-
-        var rb2d = visualInstance.GetComponentInChildren<Rigidbody2D>();
-        if (rb2d) rb2d.simulated = false;
-
-        var rb3d = visualInstance.GetComponentInChildren<Rigidbody>();
-        if (rb3d) rb3d.isKinematic = true;
+        foreach (var r in go.GetComponentsInChildren<Rigidbody2D>(true))
+        {
+            r.simulated = false;
+            r.bodyType = RigidbodyType2D.Kinematic;
+        }
     }
 
     void OnTriggerEnter2D(Collider2D other)
