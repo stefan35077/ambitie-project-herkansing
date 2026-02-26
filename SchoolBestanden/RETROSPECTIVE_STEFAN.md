@@ -24,3 +24,13 @@
 
 #### What should happen differently next sprint:
 * Next sprint I should really stay focused since the deadline is coming soon.
+
+# Retrospective 3
+
+## First Retrospective [26-02-2026]
+
+#### Reflection on your progress so far:
+* I am happy I did almost everything I wanted to do.
+
+#### Reflection on your planning/priorities this sprint:
+* My planning was not bad but could have been a little bit better.

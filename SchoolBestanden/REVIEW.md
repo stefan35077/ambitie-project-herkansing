@@ -28,3 +28,13 @@
 * Next sprint priority 1 is finished the power-ups, after that I need to finish the audio and visuals.
 ----
 
+## Third Review [26/02/2026]
+#### What new features were shown off:
+* I showed the new UI the working power-ups and the sounds.
+
+#### Received feedback:
+* I finished all tasks and overall did a good job.
+
+#### What you will do with the feedback:
+* I will use it for my next project.
+
