@@ -129,7 +129,7 @@ public class OrbShooter : MonoBehaviour
             return;
         }
 
-        RollNextShotType(); // ✅ THIS is why powerups start showing up
+        RollNextShotType(); 
 
         if (chain.TryGetOnlyColor(out int only))
             currentColorId = only;
@@ -144,7 +144,6 @@ public class OrbShooter : MonoBehaviour
             return;
         }
 
-        // ✅ preview shows powerup visual, otherwise shows the color ball prefab
         GameObject previewPrefab = GetProjectileVisualPrefab(currentColorId);
         previewInstance = Instantiate(previewPrefab, previewSocket);
 
@@ -259,7 +258,6 @@ public class OrbShooter : MonoBehaviour
                 break;
 
             case PowerUpType.Freeze:
-                chain.InsertBallAtHitIndex(hitIndex, hitWorldPos, colorId);
                 chain.Freeze(freezeSeconds);
                 break;
 

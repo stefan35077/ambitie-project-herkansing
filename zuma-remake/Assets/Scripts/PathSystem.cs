@@ -14,6 +14,12 @@ public class PathSystem : MonoBehaviour
     public bool drawGizmos = true;
     public float gizmoRadius = 0.08f;
 
+    [Header("Line Renderer")]
+    public bool drawLineRenderer = true;
+    public float lineWidth = 0.15f;
+
+    LineRenderer line;
+
     // Baked polyline representation of the spline (used for fast distance-based lookups)
     private readonly List<Vector3> bakedPoints = new();
     // Cumulative distance at each baked point (same length as bakedPoints)
@@ -22,18 +28,54 @@ public class PathSystem : MonoBehaviour
 
     void Awake()
     {
-        // Build bakedPoints + cumLen at runtime so GetPos() works immediately
         Bake();
+        SetupLineRenderer();
+        UpdateLineRenderer();
     }
+
 
 #if UNITY_EDITOR
     void OnValidate()
     {
-        // Re-bake in the editor when you tweak points/segments (without entering play mode)
         if (!Application.isPlaying)
+        {
             Bake();
+            SetupLineRenderer();
+            UpdateLineRenderer();
+        }
     }
 #endif
+
+
+    void SetupLineRenderer()
+    {
+        if (!drawLineRenderer) return;
+
+        line = GetComponent<LineRenderer>();
+        if (!line)
+            line = gameObject.AddComponent<LineRenderer>();
+
+        line.useWorldSpace = true;
+        line.loop = false;
+        line.startWidth = lineWidth;
+        line.endWidth = lineWidth;
+
+        line.material = new Material(Shader.Find("Sprites/Default"));
+        line.startColor = Color.white;
+        line.endColor = Color.white;
+
+        line.numCapVertices = 4;
+        line.numCornerVertices = 4;
+    }
+
+    void UpdateLineRenderer()
+    {
+        if (!drawLineRenderer || line == null) return;
+        if (bakedPoints.Count < 2) return;
+
+        line.positionCount = bakedPoints.Count;
+        line.SetPositions(bakedPoints.ToArray());
+    }
 
     public void Bake()
     {
