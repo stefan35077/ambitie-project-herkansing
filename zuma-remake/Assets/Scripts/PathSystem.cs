@@ -74,7 +74,14 @@ public class PathSystem : MonoBehaviour
         if (bakedPoints.Count < 2) return;
 
         line.positionCount = bakedPoints.Count;
-        line.SetPositions(bakedPoints.ToArray());
+        Vector3[] pts = bakedPoints.ToArray();
+
+        for (int i = 0; i < pts.Length; i++)
+        {
+            pts[i].z += 0.5f;
+        }
+
+        line.SetPositions(pts);
     }
 
     public void Bake()

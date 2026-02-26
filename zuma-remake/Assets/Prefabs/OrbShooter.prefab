@@ -97,7 +97,7 @@ MonoBehaviour:
   freezeWeight: 0.45
   rainbowWeight: 0.35
   blackHoleWeight: 0.2
-  shootCooldown: 0.15
+  shootCooldown: 0.65
 --- !u!1 &3597352885014971495
 GameObject:
   m_ObjectHideFlags: 0
