@@ -2,25 +2,30 @@
 
 [RequireComponent(typeof(Rigidbody2D))]
 [RequireComponent(typeof(Collider2D))]
-public class ProjectileOrb : MonoBehaviour
+public sealed class ProjectileOrb : MonoBehaviour
 {
     [HideInInspector] public OrbShooter shooter;
     [HideInInspector] public int colorId;
     [HideInInspector] public PowerUpType shotType;
 
-    public float speed = 25f;
-    public float lifeTime = 3f;
-    public float armDelay = 0.05f;
+    [Header("Movement")]
+    [SerializeField] private float speed = 25f;
 
-    Rigidbody2D rb;
-    Collider2D col;
+    [Header("Lifetime")]
+    [SerializeField] private float lifeTime = 3f;
 
-    float life;
-    float armTimer;
+    [Header("Hit safety")]
+    [SerializeField] private float armDelay = 0.05f;
 
-    Transform visualRoot;
+    private Rigidbody2D rb;
+    private Collider2D col;
 
-    void Awake()
+    private float life;
+    private float armTimer;
+
+    private Transform visualRoot;
+
+    private void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
         col = GetComponent<Collider2D>();
@@ -32,50 +37,70 @@ public class ProjectileOrb : MonoBehaviour
         col.isTrigger = true;
     }
 
-    void Start()
+    private void Start()
     {
+        // We shoot in the up direction of the projectile
         rb.linearVelocity = (Vector2)transform.up * speed;
     }
 
-    void FixedUpdate()
+    private void FixedUpdate()
     {
         armTimer += Time.fixedDeltaTime;
 
         life += Time.fixedDeltaTime;
         if (life >= lifeTime)
+        {
             Destroy(gameObject);
+        }
     }
 
     public void SetVisual(GameObject visualPrefab)
     {
-        if (visualRoot) Destroy(visualRoot.gameObject);
+        // This deletes the old visual so we only have one child visual
+        if (visualRoot != null)
+        {
+            Destroy(visualRoot.gameObject);
+            visualRoot = null;
+        }
 
-        if (!visualPrefab) return;
+        if (visualPrefab == null) return;
 
-        var go = Instantiate(visualPrefab, transform);
+        GameObject go = Instantiate(visualPrefab, transform);
         visualRoot = go.transform;
 
         visualRoot.localPosition = Vector3.zero;
         visualRoot.localRotation = Quaternion.identity;
         visualRoot.localScale = Vector3.one;
 
-        foreach (var c in go.GetComponentsInChildren<Collider2D>(true))
-            c.enabled = false;
+        DisablePhysicsOnVisual(go);
+    }
 
-        foreach (var r in go.GetComponentsInChildren<Rigidbody2D>(true))
+    private void DisablePhysicsOnVisual(GameObject root)
+    {
+        // This makes sure the visual can never collide with the chain
+        // Only the projectile collider should do hits
+        Collider2D[] cols = root.GetComponentsInChildren<Collider2D>(true);
+        for (int i = 0; i < cols.Length; i++)
         {
-            r.simulated = false;
-            r.bodyType = RigidbodyType2D.Kinematic;
+            cols[i].enabled = false;
+        }
+
+        Rigidbody2D[] rbs = root.GetComponentsInChildren<Rigidbody2D>(true);
+        for (int i = 0; i < rbs.Length; i++)
+        {
+            rbs[i].simulated = false;
+            rbs[i].bodyType = RigidbodyType2D.Kinematic;
         }
     }
 
-    void OnTriggerEnter2D(Collider2D other)
+    private void OnTriggerEnter2D(Collider2D other)
     {
         if (armTimer < armDelay) return;
-        if (!shooter) return;
+        if (shooter == null) return;
 
-        var hit = other.GetComponentInParent<ChainBallHit>();
-        if (!hit) return;
+        // We only care about hitting chain balls
+        ChainBallHit hit = other.GetComponentInParent<ChainBallHit>();
+        if (hit == null) return;
 
         shooter.OnProjectileHitChain(hit.index, transform.position, colorId, shotType);
         Destroy(gameObject);

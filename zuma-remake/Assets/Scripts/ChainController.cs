@@ -1,65 +1,166 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using UnityEngine;
 
-public class ChainController : MonoBehaviour
+public sealed class ChainController : MonoBehaviour
 {
-    [Header("Refs")]
+    [Header("Setup")]
     public PathSystem path;
-
-    [Header("Ball Prefabs (one per color)")]
-    public List<GameObject> ballPrefabs = new();
+    public List<GameObject> ballPrefabs = new List<GameObject>();
 
     [Header("Chain")]
-    public int ballCount = 20;
-    public float startHeadDist = 3f;
+    [SerializeField] private int ballCount = 20;
+    [SerializeField] private float startHeadDist = 3f;
 
-    [Header("Speed")]
-    public float normalSpeed = 2.5f;
-    public float spawnBoostSpeed = 10f;
-    public float speedBlend = 6f;
-    private float speed;
-
-    [Header("Chain Reactions")]
-    public float gapEps = 0.02f;               
-    private bool chainReactionArmed = false;
-    private readonly List<bool> gapPrev = new(); 
-
-    [Tooltip("If 0, spacing is auto-calculated from prefab diameter.")]
+    [Header("Movement")]
     public float spacing = 0f;
+    [SerializeField] private float normalSpeed = 2.5f;
+    [SerializeField] private float spawnBoostSpeed = 10f;
+    [SerializeField] private float speedBlend = 6f;
+    [SerializeField] private float endPadding = 0.3f;
+    [SerializeField] private bool loopForTesting;
 
-    [Header("End of Path")]
-    public float endPadding = 0.3f;
-    public bool loopForTesting = false;
-
-    float headDist;
-
-    [Header("Match Rules")]
-    public int matchCount = 3;
+    [Header("Match")]
+    [SerializeField] private int matchCount = 3;
 
     [Header("Score")]
-    public int score;
-    public int pointsPerOrb = 10;
-
-    [Tooltip("Extra multiplier per chain reaction. 0 = no combo system.")]
-    public int comboStep = 1;
-
-    private int comboLevel = 0;
+    [SerializeField] private int pointsPerOrb = 10;
+    [SerializeField] private int comboStep = 1;
 
     [Header("Stars")]
-    public int star1Score = 500;
-    public int star2Score = 1500;
-    public int star3Score = 3000;
+    [SerializeField] private int star1Score = 500;
+    [SerializeField] private int star2Score = 1500;
+    [SerializeField] private int star3Score = 3000;
 
-    [Header("Powerups")]
-    public bool frozen;
-    float frozenTimer;
-
-    float freezeTimer;
+    [Header("Freeze")]
+    [SerializeField] private bool frozen;
+    private float frozenTimer;
 
     [Header("Audio")]
-    public AudioSource audioSource;
-    public AudioClip matchClip;
-    [Range(0f, 0.15f)] public float matchPitchJitter = 0.05f;
+    [SerializeField] private AudioSource audioSource;
+    [SerializeField] private AudioClip matchClip;
+    [SerializeField] private float matchPitchJitter = 0.05f;
+
+    [Header("Chain reaction")]
+    [SerializeField] private float gapEps = 0.02f;
+
+    public Action<int> OnScoreChanged;
+    public Action OnLevelWon;
+    public Action OnLevelLost;
+
+    public List<Ball> balls = new List<Ball>();
+
+    private float speed;
+    private int score;
+    private int comboLevel;
+    private bool levelEnded;
+
+    private bool chainReactionArmed;
+    private readonly List<bool> gapPrev = new List<bool>();
+
+    private bool debugHasMatch;
+    private int debugMatchStart;
+    private int debugMatchEnd;
+
+    private struct MatchRange
+    {
+        public int start;
+        public int end;
+
+        public int Count
+        {
+            get { return end - start + 1; }
+        }
+    }
+
+    [Serializable]
+    public sealed class Ball
+    {
+        public Transform tr;
+        public float dist;
+        public Renderer rend;
+        public int colorId;
+    }
+
+    private void Start()
+    {
+        if (!ValidateSetup())
+        {
+            enabled = false;
+            return;
+        }
+
+        if (spacing <= 0f)
+        {
+            spacing = CalcSpacingFromPrefab(ballPrefabs[0]);
+        }
+
+        levelEnded = false;
+        comboLevel = 0;
+        debugHasMatch = false;
+
+        BuildStartChain();
+
+        // Start fast so the chain comes in quickly
+        speed = spawnBoostSpeed;
+
+        ApplyVisuals();
+        RebuildGapPrev();
+        chainReactionArmed = false;
+    }
+
+    private bool ValidateSetup()
+    {
+        if (path == null)
+        {
+            Debug.LogError("ChainController missing path");
+            return false;
+        }
+
+        if (ballPrefabs == null || ballPrefabs.Count == 0)
+        {
+            Debug.LogError("ChainController has no ball prefabs");
+            return false;
+        }
+
+        return true;
+    }
+
+    private float CalcSpacingFromPrefab(GameObject prefab)
+    {
+        if (prefab == null) return 0.6f;
+
+        Renderer r = prefab.GetComponentInChildren<Renderer>();
+        if (r == null) return 0.6f;
+
+        float diameter = Mathf.Max(r.bounds.size.x, r.bounds.size.z);
+        return diameter * 0.98f;
+    }
+
+    private void BuildStartChain()
+    {
+        balls.Clear();
+
+        for (int i = 0; i < ballCount; i++)
+        {
+            int colorId;
+            GameObject prefab = PickBallPrefab(out colorId);
+
+            GameObject go = Instantiate(prefab, transform);
+            Renderer renderer = go.GetComponentInChildren<Renderer>();
+
+            Ball ball = new Ball();
+            ball.tr = go.transform;
+            ball.rend = renderer;
+            ball.colorId = colorId;
+
+            // dist is how far the ball is on the path
+            // negative means it is still hidden and coming in
+            ball.dist = startHeadDist - (i * spacing);
+
+            balls.Add(ball);
+        }
+    }
 
     public void Freeze(float seconds)
     {
@@ -75,212 +176,24 @@ public class ChainController : MonoBehaviour
         return 0;
     }
 
-    private bool debugHasMatch;
-    private int debugMatchStart, debugMatchEnd;
-
-    public System.Action OnLevelWon;
-    public System.Action OnLevelLost;
-
-    bool levelEnded;
-
-    struct MatchRange
-    {
-        public int start;
-        public int end;
-        public int Count => end - start + 1;
-    }
-
-    public class Ball
-    {
-        public Transform tr;
-        public float dist;
-        public Renderer rend;
-        public int colorId;
-    }
-
-    [Header("Runtime Chain (read-only)")]
-    public List<Ball> balls = new();
-
-    public System.Action<int> OnScoreChanged;
-    void AddScore(int amount)
+    private void AddScore(int amount)
     {
         score += amount;
-        OnScoreChanged?.Invoke(score);
+
+        Action<int> handler = OnScoreChanged;
+        if (handler != null) handler.Invoke(score);
     }
 
     public void BlackHoleHit(int hitIndex)
     {
-        if( balls  == null || balls.Count == 0) return;
-        hitIndex = Mathf.Clamp(hitIndex, 0, balls.Count - 1);
+        if (balls == null || balls.Count == 0) return;
 
-        RemoveRange(hitIndex, hitIndex);
+        int index = Mathf.Clamp(hitIndex, 0, balls.Count - 1);
+
+        RemoveRange(index, index);
         ApplyVisuals();
 
-        chainReactionArmed = true;
-        RebuildGapPrev();
-    }
-
-    int ChoooseRainbowColorForInsert(int insertIndex)
-    {
-        int leftColor = (insertIndex - 1 >= 0) ? balls[insertIndex - 1].colorId : -1;
-        int rightColor = (insertIndex < balls.Count) ? balls[insertIndex].colorId : -1;
-
-        if (leftColor < 0) return rightColor;
-        if (rightColor < 0) return leftColor;
-
-        int leftRun = CountRunIfColor(insertIndex, leftColor);
-        int rightRun = CountRunIfColor(insertIndex - 1, rightColor);
-
-        return (rightRun > leftRun) ? rightColor : leftColor;
-    }
-
-    int CountRunIfColor(int insertIndex, int colorId)
-    {
-        int count = 1;
-        // count left run
-        for (int i = insertIndex - 1; i >= 0; i--)
-        {
-            if (balls[i].colorId != colorId) break;
-            count++;
-        }
-        // count right run
-        for (int i = insertIndex; i < balls.Count; i++)
-        {
-            if (balls[i].colorId != colorId) break;
-            count++;
-        }
-        return count;
-    }
-
-    void Start()
-    {
-        levelEnded = false;
-        comboLevel = 0;
-        debugHasMatch = false;
-
-        if (!path)
-        {
-            Debug.LogError("ChainController: 'path' is not assigned.");
-            enabled = false;
-            return;
-        }
-
-        if (ballPrefabs == null || ballPrefabs.Count == 0)
-        {
-            Debug.LogError("ChainController: ballPrefabs list is empty.");
-            enabled = false;
-            return;
-        }
-
-        // Auto spacing once from the first prefab (all prefabs should be same size)
-        if (spacing <= 0f)
-        {
-            var r0 = ballPrefabs[0].GetComponentInChildren<Renderer>();
-            if (r0 != null)
-            {
-                float diameter = Mathf.Max(r0.bounds.size.x, r0.bounds.size.z);
-                spacing = diameter * 0.98f;
-            }
-            else
-            {
-                spacing = 0.6f;
-                Debug.LogWarning("ChainController: Could not auto-calc spacing. Using 0.6.");
-            }
-        }
-
-        headDist = startHeadDist;
-
-        balls.Clear();
-        for (int i = 0; i < ballCount; i++)
-        {
-            int colorId;
-            GameObject prefab = PickBallPrefab(out colorId);
-
-            GameObject go = Instantiate(prefab, transform);
-            Renderer r = go.GetComponentInChildren<Renderer>();
-
-            Ball b = new Ball
-            {
-                tr = go.transform,
-                dist = headDist - i * spacing,
-                rend = r,
-                colorId = colorId
-            };
-
-            balls.Add(b);
-        }
-
-        speed = spawnBoostSpeed;
-
-        ApplyVisuals();
-
-        RebuildGapPrev();
-        chainReactionArmed = false;
-    }
-
-    public bool TryGetOnlyColor(out int onlyColorId)
-    {
-        onlyColorId = -1;
-        if (balls == null || balls.Count == 0) return false;
-
-        int first = -1;
-
-        for (int i = 0; i < balls.Count; i++)
-        {
-            if (balls[i].rend != null && !balls[i].rend.enabled) continue;
-
-            int c = balls[i].colorId;
-            if (first == -1) first = c;
-            else if (c != first) return false;
-        }
-
-        if (first == -1) return false;
-        onlyColorId = first;
-        return true;
-    }
-
-    bool TryGetMatchAtIndex(int index, out MatchRange range)
-    {
-        range = default;
-        if (balls == null || balls.Count == 0) return false;
-        if (index < 0 || index >= balls.Count) return false;
-
-        int baseColor = GetMatchBaseColor(index);
-        if (baseColor < 0) return false;
-
-        int left = index;
-        while (left - 1 >= 0 && IsMatchColor(balls[left - 1].colorId, baseColor))
-            left--;
-
-        int right = index;
-        while (right + 1 < balls.Count && IsMatchColor(balls[right + 1].colorId, baseColor))
-            right++;
-
-        range.start = left;
-        range.end = right;
-
-        return range.Count >= matchCount;
-    }
-
-    bool IsMatchColor(int c, int baseColor)
-    {
-        return c == baseColor || c == -1;
-    }
-
-    int GetMatchBaseColor(int index)
-    {
-        if (balls[index].colorId >= 0) return balls[index].colorId;
-
-        for (int r = 1; r < balls.Count; r++)
-        {
-            int L = index - r;
-            int R = index + r;
-
-            if (L >= 0 && balls[L].colorId >= 0) return balls[L].colorId;
-            if (R < balls.Count && balls[R].colorId >= 0) return balls[R].colorId;
-        }
-
-        return -1;
+        ArmChainReaction();
     }
 
     public void DestroyBallAtHitIndex(int hitIndex)
@@ -292,14 +205,215 @@ public class ChainController : MonoBehaviour
         RemoveRange(hitIndex, hitIndex);
         ApplyVisuals();
 
+        ArmChainReaction();
+    }
+
+    public void InsertBallAtHitIndex(int hitIndex, Vector3 worldAimPos, int colorId)
+    {
+        if (levelEnded) return;
+        if (balls == null || balls.Count == 0) return;
+        if (ballPrefabs == null || ballPrefabs.Count == 0) return;
+        if (hitIndex < 0 || hitIndex >= balls.Count) return;
+
+        bool isRainbow = (colorId == -1);
+
+        if (!isRainbow)
+        {
+            colorId = Mathf.Clamp(colorId, 0, ballPrefabs.Count - 1);
+        }
+
+        // We decide before or after based on which side is closer to the aim point
+        float baseDist = balls[hitIndex].dist;
+
+        float beforeDist = Mathf.Clamp(baseDist + spacing, 0f, path.TotalLength);
+        float afterDist = Mathf.Clamp(baseDist - spacing, 0f, path.TotalLength);
+
+        Vector3 beforePos = path.GetPos(beforeDist);
+        Vector3 afterPos = path.GetPos(afterDist);
+
+        float beforeSq = (worldAimPos - beforePos).sqrMagnitude;
+        float afterSq = (worldAimPos - afterPos).sqrMagnitude;
+
+        bool insertBefore = beforeSq <= afterSq;
+
+        float insertDist = insertBefore ? beforeDist : afterDist;
+        int insertIndex = insertBefore ? hitIndex : (hitIndex + 1);
+        insertIndex = Mathf.Clamp(insertIndex, 0, balls.Count);
+
+        // Rainbow means we pick a real color that helps create a match
+        int finalColorId = isRainbow ? ChooseRainbowColorForInsert(insertIndex) : colorId;
+        finalColorId = Mathf.Clamp(finalColorId, 0, ballPrefabs.Count - 1);
+
+        GameObject go = Instantiate(ballPrefabs[finalColorId], transform);
+        Renderer renderer = go.GetComponentInChildren<Renderer>();
+
+        Ball newBall = new Ball();
+        newBall.tr = go.transform;
+        newBall.rend = renderer;
+        newBall.colorId = finalColorId;
+        newBall.dist = insertDist;
+
+        balls.Insert(insertIndex, newBall);
+
+        // This pushes balls apart near the insert so nothing overlaps
+        ResolveSpacingLocal(insertIndex);
+
+        // Shooting a ball resets the combo chain
+        comboLevel = 0;
+
+        ApplyVisuals();
+
+        // If the insert instantly makes a match remove it right away
+        MatchRange match;
+        if (TryGetMatchAtIndex(insertIndex, out match))
+        {
+            debugHasMatch = true;
+            debugMatchStart = match.start;
+            debugMatchEnd = match.end;
+
+            RemoveRange(match.start, match.end);
+            ApplyVisuals();
+
+            ArmChainReaction();
+        }
+        else
+        {
+            debugHasMatch = false;
+        }
+    }
+
+    private int ChooseRainbowColorForInsert(int insertIndex)
+    {
+        // We look left and right and pick the color with the bigger group
+        int leftColor = (insertIndex - 1 >= 0) ? balls[insertIndex - 1].colorId : -1;
+        int rightColor = (insertIndex < balls.Count) ? balls[insertIndex].colorId : -1;
+
+        if (leftColor < 0) return rightColor;
+        if (rightColor < 0) return leftColor;
+
+        int leftRun = CountRun(insertIndex, leftColor);
+        int rightRun = CountRun(insertIndex - 1, rightColor);
+
+        if (rightRun > leftRun) return rightColor;
+        return leftColor;
+    }
+
+    private int CountRun(int insertIndex, int colorId)
+    {
+        int count = 1;
+
+        for (int i = insertIndex - 1; i >= 0; i--)
+        {
+            if (balls[i].colorId != colorId) break;
+            count++;
+        }
+
+        for (int i = insertIndex; i < balls.Count; i++)
+        {
+            if (balls[i].colorId != colorId) break;
+            count++;
+        }
+
+        return count;
+    }
+
+    private void ResolveSpacingLocal(int pivot)
+    {
+        // Every ball must stay spacing away from the next one
+        for (int i = pivot + 1; i < balls.Count; i++)
+        {
+            float maxDist = balls[i - 1].dist - spacing;
+            if (balls[i].dist > maxDist) balls[i].dist = maxDist;
+        }
+
+        for (int i = pivot - 1; i >= 0; i--)
+        {
+            float minDist = balls[i + 1].dist + spacing;
+            if (balls[i].dist < minDist) balls[i].dist = minDist;
+        }
+    }
+
+    private void ApplyVisuals()
+    {
+        // If dist is negative the ball is still hidden
+        for (int i = 0; i < balls.Count; i++)
+        {
+            Ball b = balls[i];
+            if (b == null) continue;
+
+            bool visible = b.dist >= 0f;
+
+            if (b.rend != null) b.rend.enabled = visible;
+            if (visible && b.tr != null) b.tr.position = path.GetPos(b.dist);
+
+            if (b.tr != null)
+            {
+                ChainBallHit hit = b.tr.GetComponentInChildren<ChainBallHit>();
+                if (hit != null) hit.index = i;
+            }
+        }
+    }
+
+    private bool TryGetMatchAtIndex(int index, out MatchRange range)
+    {
+        range = default(MatchRange);
+
+        if (index < 0 || index >= balls.Count) return false;
+
+        // Rainbow uses the nearest real color so it can match
+        int baseColor = GetBaseColorForMatch(index);
+        if (baseColor < 0) return false;
+
+        int left = index;
+        while (left - 1 >= 0 && IsMatchColor(balls[left - 1].colorId, baseColor))
+        {
+            left--;
+        }
+
+        int right = index;
+        while (right + 1 < balls.Count && IsMatchColor(balls[right + 1].colorId, baseColor))
+        {
+            right++;
+        }
+
+        range.start = left;
+        range.end = right;
+
+        return range.Count >= matchCount;
+    }
+
+    private int GetBaseColorForMatch(int index)
+    {
+        if (balls[index].colorId >= 0) return balls[index].colorId;
+
+        for (int r = 1; r < balls.Count; r++)
+        {
+            int left = index - r;
+            int right = index + r;
+
+            if (left >= 0 && balls[left].colorId >= 0) return balls[left].colorId;
+            if (right < balls.Count && balls[right].colorId >= 0) return balls[right].colorId;
+        }
+
+        return -1;
+    }
+
+    private bool IsMatchColor(int c, int baseColor)
+    {
+        // Rainbow counts as the same
+        return c == baseColor || c == -1;
+    }
+
+    private void ArmChainReaction()
+    {
+        // This turns on chain reaction checking after we remove something
         chainReactionArmed = true;
         RebuildGapPrev();
     }
 
-    void RebuildGapPrev()
+    private void RebuildGapPrev()
     {
         gapPrev.Clear();
-        if (balls == null) return;
 
         for (int i = 0; i < balls.Count - 1; i++)
         {
@@ -308,7 +422,7 @@ public class ChainController : MonoBehaviour
         }
     }
 
-    bool AnyGapNow()
+    private bool AnyGapNow()
     {
         for (int i = 0; i < balls.Count - 1; i++)
         {
@@ -318,28 +432,35 @@ public class ChainController : MonoBehaviour
         return false;
     }
 
-    bool TryChainReaction()
+    private bool TryChainReaction()
     {
-        if (balls == null || balls.Count < matchCount) return false;
+        if (balls.Count < matchCount) return false;
 
         if (gapPrev.Count != balls.Count - 1)
+        {
             RebuildGapPrev();
+        }
 
+        // We detect when a gap was there before and is gone now
+        // That means two parts of the chain touched again
+        // When they touch we check if it made a match
         for (int i = 0; i < balls.Count - 1; i++)
         {
             float gap = balls[i].dist - (balls[i + 1].dist + spacing);
-            bool isGappedNow = gap > gapEps;
 
-            bool wasGapped = gapPrev[i];
-            bool justClosed = wasGapped && !isGappedNow;
+            bool gappedNow = gap > gapEps;
+            bool gappedBefore = gapPrev[i];
 
-            gapPrev[i] = isGappedNow;
+            bool justClosed = gappedBefore && !gappedNow;
+
+            gapPrev[i] = gappedNow;
 
             if (!justClosed) continue;
 
             if (balls[i].colorId != balls[i + 1].colorId) continue;
 
-            if (TryGetMatchAtIndex(i, out var match))
+            MatchRange match;
+            if (TryGetMatchAtIndex(i, out match))
             {
                 debugHasMatch = true;
                 debugMatchStart = match.start;
@@ -357,118 +478,7 @@ public class ChainController : MonoBehaviour
         return false;
     }
 
-    GameObject PickBallPrefab(out int colorId)
-    {
-        colorId = Random.Range(0, ballPrefabs.Count);
-        return ballPrefabs[colorId];
-    }
-
-    public void InsertBallAtHitIndex(int hitIndex, Vector3 worldAimPos, int colorId)
-    {
-        if (balls == null || balls.Count == 0) return;
-        if (hitIndex < 0 || hitIndex >= balls.Count) return;
-        if (ballPrefabs == null || ballPrefabs.Count == 0) return;
-
-        bool isRainbow = (colorId == -1);
-
-        if (!isRainbow)
-            colorId = Mathf.Clamp(colorId, 0, ballPrefabs.Count - 1);
-
-        float baseDist = balls[hitIndex].dist;
-
-        float distBefore = Mathf.Clamp(baseDist + spacing, 0f, path.TotalLength);
-        float distAfter = Mathf.Clamp(baseDist - spacing, 0f, path.TotalLength);
-
-        Vector3 posBefore = path.GetPos(distBefore);
-        Vector3 posAfter = path.GetPos(distAfter);
-
-        bool insertBefore = (worldAimPos - posBefore).sqrMagnitude <= (worldAimPos - posAfter).sqrMagnitude;
-
-        float insertDist = insertBefore ? distBefore : distAfter;
-        int insertIndex = insertBefore ? hitIndex : hitIndex + 1;
-        insertIndex = Mathf.Clamp(insertIndex, 0, balls.Count);
-
-        int actualColorId = isRainbow ? ChoooseRainbowColorForInsert(insertIndex) : colorId;
-        actualColorId = Mathf.Clamp(actualColorId, 0, ballPrefabs.Count - 1);
-
-        GameObject go = Instantiate(ballPrefabs[actualColorId], transform);
-        Renderer r = go.GetComponentInChildren<Renderer>();
-
-        Ball newBall = new Ball
-        {
-            tr = go.transform,
-            dist = insertDist,
-            rend = r,
-            colorId = actualColorId
-        };
-
-        balls.Insert(insertIndex, newBall);
-
-        ResolveSpacingLocal(insertIndex);
-        headDist = balls[0].dist;
-
-        comboLevel = 0;
-
-        ApplyVisuals();
-
-        if (TryGetMatchAtIndex(insertIndex, out var match))
-        {
-            debugHasMatch = true;
-            debugMatchStart = match.start;
-            debugMatchEnd = match.end;
-
-            RemoveRange(match.start, match.end);
-            ApplyVisuals();
-
-            chainReactionArmed = true;
-            RebuildGapPrev();
-        }
-        else
-        {
-            debugHasMatch = false;
-        }
-
-        headDist = balls.Count > 0 ? balls[0].dist : headDist;
-    }
-
-    void ResolveSpacingLocal(int pivot)
-    {
-        for (int i = pivot + 1; i < balls.Count; i++)
-        {
-            float maxDist = balls[i - 1].dist - spacing;
-            if (balls[i].dist > maxDist)
-                balls[i].dist = maxDist;
-        }
-
-        for (int i = pivot - 1; i >= 0; i--)
-        {
-            float minDist = balls[i + 1].dist + spacing;
-            if (balls[i].dist < minDist)
-                balls[i].dist = minDist;
-        }
-    }
-
-    void ApplyVisuals()
-    {
-        for (int i = 0; i < balls.Count; i++)
-        {
-            Ball b = balls[i];
-
-            if (b.rend != null)
-                b.rend.enabled = (b.dist >= 0f);
-
-            if (b.dist >= 0f)
-                b.tr.position = path.GetPos(b.dist);
-
-            if (b.tr != null)
-            {
-                var hit = b.tr.GetComponentInChildren<ChainBallHit>();
-                if (hit != null) hit.index = i;
-            }
-        }
-    }
-
-    int RemoveRange(int start, int end)
+    private int RemoveRange(int start, int end)
     {
         if (balls == null || balls.Count == 0) return 0;
 
@@ -478,125 +488,109 @@ public class ChainController : MonoBehaviour
 
         int removed = (end - start + 1);
 
-        // ---- popup position = middle ball of the removed range ----
-        int mid = (start + end) / 2;
+        Vector3 popupPos;
+        bool hasPopupPos = TryGetPopupPosition(start, end, out popupPos);
 
-        Vector3 popupPos = transform.position;
-        bool hasPos = false;
-
-        var midTr = balls[mid].tr;
-        if (midTr != null)
-        {
-            popupPos = midTr.position;
-            hasPos = true;
-        }
-        else
-        {
-            // fallback: search nearest valid Transform in the range
-            for (int offset = 1; (mid - offset) >= start || (mid + offset) <= end; offset++)
-            {
-                int a = mid - offset;
-                int b = mid + offset;
-
-                if (a >= start && balls[a].tr != null) { popupPos = balls[a].tr.position; hasPos = true; break; }
-                if (b <= end && balls[b].tr != null) { popupPos = balls[b].tr.position; hasPos = true; break; }
-            }
-        }
-
-        // ---- remove objects ----
         for (int i = end; i >= start; i--)
         {
-            var tr = balls[i].tr;
+            Transform tr = balls[i].tr;
             if (tr != null) Destroy(tr.gameObject);
             balls.RemoveAt(i);
         }
 
-        // ---- score ----
-        int mult = 1 + comboLevel * comboStep;
+        int mult = 1 + (comboLevel * comboStep);
         int gainedPoints = removed * pointsPerOrb * mult;
         AddScore(gainedPoints);
 
-        if (audioSource && matchClip)
+        PlayMatchSound();
+
+        if (hasPopupPos)
         {
-            float prevPitch = audioSource.pitch;
-            audioSource.pitch = 1f + Random.Range(-matchPitchJitter, matchPitchJitter);
-            audioSource.PlayOneShot(matchClip);
-            audioSource.pitch = prevPitch;
-        }
-
-
-        // ---- popup ----
-        if (hasPos)
             ScorePopup.Spawn(popupPos, gainedPoints);
+        }
 
         if (!levelEnded && balls.Count == 0)
         {
             levelEnded = true;
-            OnLevelWon?.Invoke();
+            Action won = OnLevelWon;
+            if (won != null) won.Invoke();
         }
 
         return removed;
     }
 
-    void Update()
+    private bool TryGetPopupPosition(int start, int end, out Vector3 popupPos)
+    {
+        // We try to use the middle ball so the popup looks centered
+        popupPos = transform.position;
+
+        int mid = (start + end) / 2;
+
+        if (balls[mid].tr != null)
+        {
+            popupPos = balls[mid].tr.position;
+            return true;
+        }
+
+        for (int offset = 1; (mid - offset) >= start || (mid + offset) <= end; offset++)
+        {
+            int a = mid - offset;
+            int b = mid + offset;
+
+            if (a >= start && balls[a].tr != null)
+            {
+                popupPos = balls[a].tr.position;
+                return true;
+            }
+
+            if (b <= end && balls[b].tr != null)
+            {
+                popupPos = balls[b].tr.position;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void PlayMatchSound()
+    {
+        if (audioSource == null) return;
+        if (matchClip == null) return;
+
+        float oldPitch = audioSource.pitch;
+
+        float jitter = UnityEngine.Random.Range(-matchPitchJitter, matchPitchJitter);
+        audioSource.pitch = 1f + jitter;
+
+        audioSource.PlayOneShot(matchClip);
+
+        audioSource.pitch = oldPitch;
+    }
+
+    private GameObject PickBallPrefab(out int colorId)
+    {
+        colorId = UnityEngine.Random.Range(0, ballPrefabs.Count);
+        return ballPrefabs[colorId];
+    }
+
+    private void Update()
     {
         if (levelEnded) return;
         if (balls == null || balls.Count == 0) return;
 
         float dt = Time.deltaTime;
 
-        if (frozen)
-        {
-            frozenTimer -= dt;
-            if (frozenTimer <= 0f)
-            {
-                frozen = false;
-                frozenTimer = 0f;
-            }
-        }
+        UpdateFreeze(dt);
 
         if (!frozen)
         {
-            int tail = balls.Count - 1;
-
-            bool stillSpawning = balls[tail].dist < 0f;
-            float targetSpeed = stillSpawning ? spawnBoostSpeed : normalSpeed;
-            speed = Mathf.Lerp(speed, targetSpeed, 1f - Mathf.Exp(-speedBlend * dt));
-
-            balls[tail].dist += speed * dt;
-
-            for (int i = tail - 1; i >= 0; i--)
-            {
-                float minDist = balls[i + 1].dist + spacing;
-                if (balls[i].dist < minDist)
-                    balls[i].dist = minDist;
-            }
+            MoveChainForward(dt);
         }
 
-        if (balls[0].dist >= path.TotalLength - endPadding)
+        if (ReachedEnd())
         {
-            Debug.Log("Reached end of path!");
-
-            if (loopForTesting)
-            {
-                float shift = balls[0].dist;
-                for (int i = 0; i < balls.Count; i++)
-                    balls[i].dist -= shift;
-
-                RebuildGapPrev();
-                chainReactionArmed = false;
-                comboLevel = 0;
-            }
-            else
-            {
-                if (!levelEnded)
-                {
-                    levelEnded = true;
-                    OnLevelLost?.Invoke();
-                }
-                enabled = false;
-                return;
-            }
+            return;
         }
 
         if (chainReactionArmed)
@@ -613,53 +607,81 @@ public class ChainController : MonoBehaviour
         ApplyVisuals();
     }
 
-    public int GetRandomExistingColorId()
+    private void UpdateFreeze(float dt)
     {
-        if (balls == null || balls.Count == 0) return 0;
+        if (!frozen) return;
 
-        bool[] present = new bool[ballPrefabs.Count];
-        int presentCount = 0;
+        frozenTimer -= dt;
 
-        for (int i = 0; i < balls.Count; i++)
+        if (frozenTimer <= 0f)
         {
-            if (balls[i].rend != null && !balls[i].rend.enabled) continue;
-
-            int c = balls[i].colorId;
-            if (c < 0 || c >= present.Length) continue;
-
-            if (!present[c])
-            {
-                present[c] = true;
-                presentCount++;
-            }
+            frozenTimer = 0f;
+            frozen = false;
         }
-
-        if (presentCount == 0)
-            return Random.Range(0, ballPrefabs.Count);
-
-        int pick = Random.Range(0, presentCount);
-
-        for (int c = 0; c < present.Length; c++)
-        {
-            if (!present[c]) continue;
-            if (pick == 0) return c;
-            pick--;
-        }
-
-        return 0;
     }
 
-    void OnDrawGizmos()
+    private void MoveChainForward(float dt)
+    {
+        int tail = balls.Count - 1;
+
+        // If tail is still hidden we move faster so it comes in quickly
+        bool stillSpawning = balls[tail].dist < 0f;
+
+        float targetSpeed = stillSpawning ? spawnBoostSpeed : normalSpeed;
+        float t = 1f - Mathf.Exp(-speedBlend * dt);
+        speed = Mathf.Lerp(speed, targetSpeed, t);
+
+        balls[tail].dist += speed * dt;
+
+        // This keeps the chain packed so balls do not separate
+        for (int i = tail - 1; i >= 0; i--)
+        {
+            float minDist = balls[i + 1].dist + spacing;
+            if (balls[i].dist < minDist) balls[i].dist = minDist;
+        }
+    }
+
+    private bool ReachedEnd()
+    {
+        if (balls[0].dist < path.TotalLength - endPadding) return false;
+
+        if (loopForTesting)
+        {
+            float shift = balls[0].dist;
+
+            for (int i = 0; i < balls.Count; i++)
+            {
+                balls[i].dist -= shift;
+            }
+
+            RebuildGapPrev();
+            chainReactionArmed = false;
+            comboLevel = 0;
+            return false;
+        }
+
+        levelEnded = true;
+
+        Action lost = OnLevelLost;
+        if (lost != null) lost.Invoke();
+
+        enabled = false;
+        return true;
+    }
+
+    private void OnDrawGizmos()
     {
         if (!Application.isPlaying) return;
         if (!debugHasMatch) return;
         if (balls == null) return;
 
         Gizmos.color = Color.magenta;
+
         for (int i = debugMatchStart; i <= debugMatchEnd; i++)
         {
             if (i < 0 || i >= balls.Count) continue;
             if (balls[i].tr == null) continue;
+
             Gizmos.DrawWireSphere(balls[i].tr.position, 0.35f);
         }
     }
