@@ -561,15 +561,13 @@ MonoBehaviour:
   - {fileID: 7597469843830172308, guid: f82612b1fdce2204b86a2d14cd2efd7f, type: 3}
   ballCount: 20
   startHeadDist: 1.74
+  spacing: 0.65
   normalSpeed: 1
   spawnBoostSpeed: 8
   speedBlend: 4
-  gapEps: 0.02
-  spacing: 0.65
   endPadding: 0.3
   loopForTesting: 0
   matchCount: 3
-  score: 0
   pointsPerOrb: 10
   comboStep: 1
   star1Score: 200
@@ -579,6 +577,9 @@ MonoBehaviour:
   audioSource: {fileID: 785164190}
   matchClip: {fileID: 8300000, guid: b13efa634eebd654b9ce9a696d4b97ef, type: 3}
   matchPitchJitter: 0.05
+  gapEps: 0.02
+  balls: []
+  score: 0
 --- !u!120 &182473218
 LineRenderer:
   serializedVersion: 2
@@ -605,7 +606,7 @@ LineRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 1678381015}
+  - {fileID: 1993316215}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -4195,7 +4196,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1153542141}
   - component: {fileID: 1153542142}
-  - component: {fileID: 1153542143}
+  - component: {fileID: 1153542146}
   - component: {fileID: 1153542144}
   - component: {fileID: 1153542145}
   m_Layer: 0
@@ -4234,19 +4235,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ScoreUI
   chain: {fileID: 182473217}
   scoreText: {fileID: 1337368118}
---- !u!114 &1153542143
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1153542140}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: f8fca4c5866fc9d4db93822007a49128, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::LevelManager
-  chain: {fileID: 182473217}
 --- !u!114 &1153542144
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4297,6 +4285,19 @@ MonoBehaviour:
   floatUpPixels: 90
   startScale: 1
   endScale: 1.15
+--- !u!114 &1153542146
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1153542140}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f8fca4c5866fc9d4db93822007a49128, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::LevelManager
+  chain: {fileID: 182473217}
 --- !u!1 &1192581594
 GameObject:
   m_ObjectHideFlags: 0
@@ -5521,47 +5522,6 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
---- !u!21 &1678381015
-Material:
-  serializedVersion: 8
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_Name: Sprites/Default
-  m_Shader: {fileID: 10753, guid: 0000000000000000f000000000000000, type: 0}
-  m_Parent: {fileID: 0}
-  m_ModifiedSerializedProperties: 0
-  m_ValidKeywords: []
-  m_InvalidKeywords: []
-  m_LightmapFlags: 4
-  m_EnableInstancingVariants: 0
-  m_DoubleSidedGI: 0
-  m_CustomRenderQueue: -1
-  stringTagMap: {}
-  disabledShaderPasses: []
-  m_LockedProperties: 
-  m_SavedProperties:
-    serializedVersion: 3
-    m_TexEnvs:
-    - _AlphaTex:
-        m_Texture: {fileID: 0}
-        m_Scale: {x: 1, y: 1}
-        m_Offset: {x: 0, y: 0}
-    - _MainTex:
-        m_Texture: {fileID: 0}
-        m_Scale: {x: 1, y: 1}
-        m_Offset: {x: 0, y: 0}
-    m_Ints: []
-    m_Floats:
-    - PixelSnap: 0
-    - _EnableExternalAlpha: 0
-    m_Colors:
-    - _Color: {r: 1, g: 1, b: 1, a: 1}
-    - _Flip: {r: 1, g: 1, b: 1, a: 1}
-    - _RendererColor: {r: 1, g: 1, b: 1, a: 1}
-  m_BuildTextureStacks: []
-  m_AllowLocking: 1
 --- !u!1 &1732425103
 GameObject:
   m_ObjectHideFlags: 0
@@ -5862,6 +5822,47 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1965547425}
   m_CullTransparentMesh: 1
+--- !u!21 &1993316215
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: Sprites/Default
+  m_Shader: {fileID: 10753, guid: 0000000000000000f000000000000000, type: 0}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+    - _AlphaTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _MainTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Ints: []
+    m_Floats:
+    - PixelSnap: 0
+    - _EnableExternalAlpha: 0
+    m_Colors:
+    - _Color: {r: 1, g: 1, b: 1, a: 1}
+    - _Flip: {r: 1, g: 1, b: 1, a: 1}
+    - _RendererColor: {r: 1, g: 1, b: 1, a: 1}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1
 --- !u!1 &1997624115
 GameObject:
   m_ObjectHideFlags: 0
