@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using TMPro;
@@ -29,6 +29,11 @@ public class LevelEndUI : MonoBehaviour
     [Header("Progress Save")]
     public int levelIndex = -1;
     public string starsKeyPrefix = "LevelStars_";
+
+    [Header("Audio")]
+    public AudioSource audioSource;
+    public AudioClip winClip;
+    public AudioClip loseClip;
 
     bool ended;
 
@@ -61,6 +66,15 @@ public class LevelEndUI : MonoBehaviour
         }
     }
 
+    void PlayUISound(AudioClip clip)
+    {
+        if (!audioSource || !clip) return;
+
+        audioSource.ignoreListenerPause = true;
+        audioSource.ignoreListenerVolume = true;
+        audioSource.PlayOneShot(clip);
+    }
+
     void SaveStars(int stars)
     {
         int idx = (levelIndex >= 0) ? levelIndex : SceneManager.GetActiveScene().buildIndex;
@@ -80,6 +94,7 @@ public class LevelEndUI : MonoBehaviour
         if (ended) return;
         ended = true;
 
+        PlayUISound(winClip); 
         FreezeGame();
 
         if (loseScreen) loseScreen.SetActive(false);
@@ -113,6 +128,7 @@ public class LevelEndUI : MonoBehaviour
         if (ended) return;
         ended = true;
 
+        PlayUISound(loseClip);
         FreezeGame();
 
         if (winScreen) winScreen.SetActive(false);
