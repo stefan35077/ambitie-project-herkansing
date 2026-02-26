@@ -51,7 +51,7 @@ public sealed class ChainController : MonoBehaviour
     public List<Ball> balls = new List<Ball>();
 
     private float speed;
-    private int score;
+    public int score;
     private int comboLevel;
     private bool levelEnded;
 
