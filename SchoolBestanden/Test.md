@@ -37,7 +37,7 @@ Check if a new player can understand and play the game without any explanation.
 
 ## Result
 - **Issues found:**  
-None
+ Level 4 and 5 button do not work.
 
 ## Conclusion
 The game is overall pretty clear but the main issue is the visuals during gameplay.
